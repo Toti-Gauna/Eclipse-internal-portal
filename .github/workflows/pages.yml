@@ -1,0 +1,47 @@
+name: Publish Eclipse portal to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - codex/eclipse-internal-portal-frontend-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare static site
+        run: |
+          mkdir -p _site/src/mock
+          cp index.html styles.css _site/
+          cp src/app.js _site/src/app.js
+          cp src/mock/adapter.js _site/src/mock/adapter.js
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
