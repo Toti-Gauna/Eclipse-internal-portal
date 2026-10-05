@@ -1,29 +1,39 @@
 // Reglas del sistema Eclipse (Contexto Eclipse en Notion). Funciones puras: sin DOM ni storage.
+// Las etapas de proyecto son las mismas que ve el cliente en el portal de Eclipse-Web.
 
 export const UNITS = ["Agency", "Media", "Market"];
 export const WARM_SOURCES = ["Referido", "Comunidad", "Presencial"];
 export const SOURCES = ["Upwork", "Lote", "Web", ...WARM_SOURCES, "Otro"];
 
+// ---------- Prospectos ----------
+
 export const PROSPECT_STAGES = [
-  ["contactado", "Contactado"],
-  ["respondio", "Respondió"],
-  ["llamada", "Llamada hecha"],
-  ["propuesta", "Propuesta enviada"],
-  ["ganado", "Ganado · seña cobrada"],
-  ["perdido", "Perdido"],
-  ["pausado", "Pausado"],
+  ["contactado", "Contactado", "Primer contacto enviado, sin respuesta."],
+  ["respondio", "Respondió", "Llamada el mismo día."],
+  ["llamada", "Llamada hecha", "Propuesta en ≤24 h."],
+  ["propuesta", "Propuesta enviada", "Toques a +2, +5 y +9 días."],
+  ["ganado", "Seña cobrada", "Es proyecto."],
+  ["perdido", "Perdido", "Cerrado con motivo."],
+  ["pausado", "En pausa", "Con causa y fecha de revisión."],
 ];
+/** El camino del prospecto, en el mismo lenguaje de fases que el proyecto: 1 de 5 … 5 de 5. */
+export const PROSPECT_PATH = ["contactado", "respondio", "llamada", "propuesta", "ganado"];
 export const OPEN_STAGES = ["respondio", "llamada", "propuesta"];
 export const TOUCH_OFFSETS = [2, 5, 9];
 
-export const PROJECT_STAGES = [
-  ["build", "Build"],
-  ["qa", "QA"],
-  ["entrega", "Entrega"],
-  ["cobro", "Cobro de saldo"],
-  ["referido", "Pedir referido"],
-  ["cerrado", "Cerrado"],
-];
+// ---------- Proyectos (mismas etapas que el portal del cliente) ----------
+
+export const MAIN_STAGES = ["preparation", "build", "eclipseReview", "clientReview", "delivery"];
+export const STAGES = {
+  preparation: { name: "Preparación", short: "Inicio confirmado e insumos", exit: "Pasa a Construcción con todos los insumos y el plan aprobado.", owner: "Eclipse y cliente" },
+  build: { name: "Construcción", short: "Ejecución del alcance", exit: "Pasa a Revisión de Eclipse cuando todo el alcance está construido.", owner: "Eclipse" },
+  eclipseReview: { name: "Revisión de Eclipse", short: "QA interno", exit: "Pasa a revisión del cliente sin pendientes en la lista de control.", owner: "Eclipse" },
+  clientReview: { name: "Revisión del cliente", short: "Aprobación o decisión requerida", exit: "Pasa a Entrega con la aprobación del cliente registrada.", owner: "Cliente" },
+  delivery: { name: "Entrega", short: "Publicación, traspaso y capacitación", exit: "Después: cobrar saldo y pedir referido en 48 h.", owner: "Eclipse y cliente" },
+  support: { name: "Soporte", short: "Mantenimiento contratado", exit: "Dura mientras el mantenimiento esté activo.", owner: "Eclipse" },
+  paused: { name: "En pausa", short: "Con motivo y próxima acción", exit: "Se retoma cuando se resuelve el motivo.", owner: "Según el motivo" },
+  closed: { name: "Cerrado", short: "Cobrado y con referido pedido", exit: "Etapa final.", owner: "Eclipse" },
+};
 
 export const PAYMENT_CONCEPTS = ["Seña", "Saldo", "Abono mensual", "Otro"];
 export const SPLIT = [
@@ -33,7 +43,8 @@ export const SPLIT = [
   ["Goce", 0.1],
 ];
 
-export const labelOf = (pairs, key) => pairs.find(([id]) => id === key)?.[1] || key;
+export const prospectStageLabel = (key) => PROSPECT_STAGES.find(([id]) => id === key)?.[1] || key;
+export const prospectStageHint = (key) => PROSPECT_STAGES.find(([id]) => id === key)?.[2] || "";
 
 // ---------- Fechas (días locales, formato YYYY-MM-DD) ----------
 
@@ -80,12 +91,22 @@ export function hasResponded(prospect) {
 
 export const isWarm = (prospect) => WARM_SOURCES.includes(prospect.source);
 
-/** Próxima acción de un prospecto según la regla: responde → llamada el mismo día → propuesta ≤24 h → toques +2/+5/+9. */
+/** Posición en el camino del prospecto (1–5); en pausa, la etapa donde se frenó. */
+export function prospectPosition(prospect) {
+  if (prospect.stage === "pausado") {
+    const pause = lastEvent(prospect, "pausa");
+    return PROSPECT_PATH.indexOf(pause?.prevStage || "contactado") + 1;
+  }
+  const index = PROSPECT_PATH.indexOf(prospect.stage);
+  return index >= 0 ? index + 1 : null;
+}
+
+/** Próxima acción: responde → llamada el mismo día → propuesta ≤24 h → toques +2/+5/+9. */
 export function prospectNextAction(prospect) {
   switch (prospect.stage) {
     case "respondio": {
       const response = lastEvent(prospect, "respuesta");
-      return { kind: "llamada", title: "Llamada (mismo día que respondió)", due: response?.date || prospect.createdAt };
+      return { kind: "llamada", title: "Llamar (mismo día que respondió)", due: response?.date || prospect.createdAt };
     }
     case "llamada": {
       const call = lastEvent(prospect, "llamada");
@@ -103,7 +124,7 @@ export function prospectNextAction(prospect) {
     }
     case "pausado": {
       const pause = lastEvent(prospect, "pausa");
-      return pause?.reviewDate ? { kind: "revisar", title: "Revisar pausa", due: pause.reviewDate } : null;
+      return pause?.reviewDate ? { kind: "revisar", title: "Revisar la pausa", due: pause.reviewDate } : null;
     }
     default:
       return null;
@@ -115,8 +136,8 @@ export function prospectNextAction(prospect) {
 /** Lote: D0 envío · D+2 señal · D+7 cierre e informe. */
 export function batchNextAction(batch) {
   if (batch.report) return null;
-  if (!batch.signal) return { kind: "señal", title: "Leer señal del lote (D+2)", due: addDays(batch.sentAt, 2) };
-  return { kind: "cierre", title: "Cerrar lote e informe de 3 líneas (D+7)", due: addDays(batch.sentAt, 7) };
+  if (!batch.signal) return { kind: "señal", title: "Leer la señal del lote (D+2)", due: addDays(batch.sentAt, 2) };
+  return { kind: "cierre", title: "Cerrar el lote con informe de 3 líneas (D+7)", due: addDays(batch.sentAt, 7) };
 }
 
 export function batchStats(batch, prospects) {
@@ -137,25 +158,43 @@ export function projectBalance(project, payments) {
   return Math.max(0, project.total - projectPaid(project, payments));
 }
 
-/** Proyecto: seña → build → QA → entrega → cobro → referido en 48 h. */
-export function projectNextAction(project, payments) {
-  switch (project.stage) {
-    case "build":
-    case "qa":
-    case "entrega":
-      return project.deliveryDate
-        ? { kind: "avanzar", title: `${labelOf(PROJECT_STAGES, project.stage)} · entrega comprometida`, due: project.deliveryDate }
-        : null;
-    case "cobro":
-      return { kind: "cobro", title: `Cobrar saldo (USD ${formatNumber(projectBalance(project, payments))})`, due: project.deliveredAt || todayISO() };
-    case "referido":
-      return { kind: "referido", title: "Pedir referido (48 h desde el cobro)", due: addDays(project.paidAt || todayISO(), 2) };
-    default:
-      return null;
-  }
+/** "2 de 5": posición entre las cinco etapas públicas (en pausa, la etapa donde se frenó). */
+export function stagePosition(project) {
+  const stage = project.stage === "paused" ? project.pausedIn : project.stage;
+  const index = MAIN_STAGES.indexOf(stage);
+  if (index >= 0) return index + 1;
+  return project.stage === "support" || project.stage === "closed" ? MAIN_STAGES.length : null;
 }
 
-// ---------- Agenda de hoy ----------
+export const nextStage = (stage) => MAIN_STAGES[MAIN_STAGES.indexOf(stage) + 1] || null;
+
+/** Cierre interno después de la entrega: entregado → saldo cobrado → referido pedido. */
+export function closeout(project, payments) {
+  const delivered = !!project.deliveredAt;
+  const paid = delivered && projectBalance(project, payments) === 0;
+  return { delivered, paid, referral: !!project.referral };
+}
+
+export function projectNextAction(project, payments) {
+  if (project.stage === "paused") {
+    return { kind: "pausa", title: `Retomar: ${project.pause?.next || "resolver el motivo"}`, due: project.pause?.review || todayISO() };
+  }
+  if (project.stage === "closed" || project.stage === "support") return null;
+  const done = closeout(project, payments);
+  if (done.delivered && !done.paid) {
+    return { kind: "cobro", title: `Cobrar saldo (USD ${formatNumber(projectBalance(project, payments))})`, due: project.deliveredAt };
+  }
+  if (done.paid && !done.referral) {
+    return { kind: "referido", title: "Pedir referido (48 h desde el cobro)", due: addDays(project.paidAt || project.deliveredAt, 2) };
+  }
+  if (project.clientAction) {
+    return { kind: "cliente", title: `Seguir al cliente: ${project.clientAction.title}`, due: addDays(project.clientAction.requestedOn, 2) };
+  }
+  if (project.milestone) return { kind: "hito", title: project.milestone.title, due: project.milestone.due };
+  return null;
+}
+
+// ---------- Agenda ----------
 
 export function agenda(data, today = todayISO()) {
   const items = [];
@@ -238,7 +277,7 @@ export function pipelineValues(data) {
     .filter((prospect) => prospect.stage === "propuesta")
     .reduce((sum, prospect) => sum + (proposalOf(prospect)?.amount || 0), 0);
   const receivable = data.projects
-    .filter((project) => project.stage !== "cerrado")
+    .filter((project) => project.stage !== "closed")
     .reduce((sum, project) => sum + projectBalance(project, data.payments), 0);
   return { proposed, receivable };
 }

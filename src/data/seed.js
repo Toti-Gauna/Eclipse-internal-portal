@@ -4,6 +4,7 @@ import { addDays, todayISO } from "../rules.js";
 // Ningún nombre corresponde a un cliente real. Las fechas son relativas al día en que se cargan.
 
 export const SETTINGS = {
+  owner: "Ignacio",
   mrrGoal: 2500,
   bimesters: [
     { id: "B1", label: "B1 · oct–nov 2026", start: "2026-10-01", end: "2026-11-30", goals: { Agency: 20000 } },
@@ -103,35 +104,95 @@ export function buildSeed(today = todayISO()) {
     },
   ];
 
+  const upd = (id, offset, title, body = "", stageChange) => ({ id, date: d(offset), title, body, ...(stageChange ? { stageChange } : {}) });
+
   const projects = [
     {
-      id: "pr-ropa", prospectId: "p-ropa", name: "Tienda de ropa · e-commerce", client: "Tienda de ropa online", unit: "Agency",
-      stage: "build", total: 2400, startedAt: d(-4), deliveryDate: d(10), deliveredAt: null, paidAt: null,
+      id: "pr-ropa", code: "ECL-012", prospectId: "p-ropa", name: "Tienda de ropa · e-commerce", client: "Tienda de ropa online", unit: "Agency",
+      service: "E-commerce + agente de consultas", stage: "preparation", total: 2400, maintenance: 0, startedAt: d(-4),
+      history: [{ stage: "preparation", start: d(-4) }],
+      milestone: { title: "Plan de trabajo y accesos listos", owner: "Eclipse", due: d(1) },
+      clientAction: { title: "Enviar fotos de producto y tabla de talles", requestedOn: d(-3) },
+      deliveryEstimate: d(24), deliveredAt: null, paidAt: null, referral: null,
       notes: "Catálogo + carrito + agente de consultas. Extra sin pedir: guía de talles con IA.",
+      updates: [upd("u1", -4, "Proyecto confirmado", "Seña registrada. Pedimos fotos, textos y accesos.", { from: null, to: "preparation" })],
     },
     {
-      id: "pr-clinica", prospectId: null, name: "Clínica · turnos por WhatsApp", client: "Clínica (referido)", unit: "Agency",
-      stage: "cobro", total: 1800, startedAt: d(-15), deliveryDate: d(-1), deliveredAt: d(-1), paidAt: null,
-      notes: "Entregado y capacitado. Mantenimiento mensual contratado.",
+      id: "pr-turnos", code: "ECL-011", prospectId: null, name: "Centro odontológico · turnos por WhatsApp", client: "Centro odontológico (referido)", unit: "Agency",
+      service: "Agente de atención · turnos", stage: "build", total: 1600, maintenance: 0, startedAt: d(-12),
+      history: [{ stage: "preparation", start: d(-12), end: d(-9) }, { stage: "build", start: d(-8) }],
+      milestone: { title: "Flujo de reprogramación funcionando en prueba", owner: "Eclipse", due: d(0) },
+      clientAction: null, deliveryEstimate: d(12), deliveredAt: null, paidAt: null, referral: null,
+      notes: "Recordatorio 24 h antes + reprogramación sin llamada.",
+      updates: [
+        upd("u3", -2, "Recordatorios listos en prueba", "Ya salen los avisos 24 h antes; falta reprogramar desde el chat."),
+        upd("u2", -8, "Arranca Construcción", "Insumos completos y agenda conectada.", { from: "preparation", to: "build" }),
+        upd("u1", -12, "Proyecto confirmado", "Seña registrada.", { from: null, to: "preparation" }),
+      ],
     },
     {
-      id: "pr-contable", prospectId: null, name: "Estudio contable · automatización documental", client: "Estudio contable", unit: "Agency",
-      stage: "referido", total: 1200, startedAt: d(-25), deliveryDate: d(-5), deliveredAt: d(-5), paidAt: d(-2),
-      notes: "Cobrado completo.",
+      id: "pr-clinica", code: "ECL-009", prospectId: null, name: "Clínica · agente de consultas", client: "Clínica (referido)", unit: "Agency",
+      service: "Agente de atención IA", stage: "clientReview", total: 1800, maintenance: 120, startedAt: d(-20),
+      history: [
+        { stage: "preparation", start: d(-20), end: d(-17) }, { stage: "build", start: d(-16), end: d(-6) },
+        { stage: "eclipseReview", start: d(-5), end: d(-3) }, { stage: "clientReview", start: d(-2) },
+      ],
+      milestone: { title: "Aprobación de las respuestas del agente", owner: "Cliente", due: d(1) },
+      clientAction: { title: "Aprobar las respuestas o pedir ajustes", requestedOn: d(-2) },
+      deliveryEstimate: d(5), deliveredAt: null, paidAt: null, referral: null,
+      notes: "Mantenimiento mensual contratado: pasa a Soporte después del cierre.",
+      updates: [
+        upd("u3", -2, "Listo para tu revisión", "El agente responde las 40 preguntas frecuentes.", { from: "eclipseReview", to: "clientReview" }),
+        upd("u2", -16, "Arranca Construcción", "", { from: "preparation", to: "build" }),
+        upd("u1", -20, "Proyecto confirmado", "Seña registrada.", { from: null, to: "preparation" }),
+      ],
+    },
+    {
+      id: "pr-contable", code: "ECL-007", prospectId: null, name: "Estudio contable · automatización documental", client: "Estudio contable", unit: "Agency",
+      service: "Automatización documental", stage: "delivery", total: 1200, maintenance: 0, startedAt: d(-25),
+      history: [
+        { stage: "preparation", start: d(-25), end: d(-23) }, { stage: "build", start: d(-22), end: d(-12) },
+        { stage: "eclipseReview", start: d(-11), end: d(-10) }, { stage: "clientReview", start: d(-9), end: d(-7) }, { stage: "delivery", start: d(-6) },
+      ],
+      milestone: null, clientAction: null, deliveryEstimate: null, deliveredAt: d(-5), paidAt: d(-2), referral: null,
+      notes: "Entregado, capacitado y cobrado completo.",
+      updates: [
+        upd("u3", -5, "Entrega hecha", "Publicado y capacitación al equipo."),
+        upd("u2", -6, "Arranca Entrega", "", { from: "clientReview", to: "delivery" }),
+        upd("u1", -25, "Proyecto confirmado", "Seña registrada.", { from: null, to: "preparation" }),
+      ],
+    },
+    {
+      id: "pr-voz", code: "ECL-010", prospectId: null, name: "Pizzería · agente de voz para pedidos", client: "Pizzería", unit: "Agency",
+      service: "Agente de voz IA", stage: "paused", pausedIn: "build", total: 1400, maintenance: 0, startedAt: d(-18),
+      pause: { since: d(-4), reason: "El cliente cambia de proveedor de telefonía.", next: "Confirmar el número nuevo de la sucursal", review: d(3) },
+      history: [{ stage: "preparation", start: d(-18), end: d(-15) }, { stage: "build", start: d(-14) }],
+      milestone: null, clientAction: { title: "Confirmar el número nuevo de la sucursal", requestedOn: d(-4) },
+      deliveryEstimate: null, deliveredAt: null, paidAt: null, referral: null, notes: "",
+      updates: [
+        upd("u2", -4, "Proyecto en pausa", "Esperamos el número nuevo para conectar el agente.", { from: "build", to: "paused" }),
+        upd("u1", -18, "Proyecto confirmado", "Seña registrada.", { from: null, to: "preparation" }),
+      ],
     },
   ];
 
   const payments = [
     { id: "c1", date: d(-4), amount: 1200, unit: "Agency", projectId: "pr-ropa", concept: "Seña", note: "Transferencia" },
-    { id: "c2", date: d(-3), amount: 900, unit: "Agency", projectId: "pr-clinica", concept: "Seña", note: "" },
-    { id: "c3", date: d(-25), amount: 600, unit: "Agency", projectId: "pr-contable", concept: "Seña", note: "" },
-    { id: "c4", date: d(-2), amount: 600, unit: "Agency", projectId: "pr-contable", concept: "Saldo", note: "" },
-    { id: "c5", date: d(-1), amount: 250, unit: "Media", projectId: null, concept: "Otro", note: "Edición de reel puntual" },
+    { id: "c2", date: d(-12), amount: 800, unit: "Agency", projectId: "pr-turnos", concept: "Seña", note: "" },
+    { id: "c3", date: d(-20), amount: 900, unit: "Agency", projectId: "pr-clinica", concept: "Seña", note: "" },
+    { id: "c4", date: d(-25), amount: 600, unit: "Agency", projectId: "pr-contable", concept: "Seña", note: "" },
+    { id: "c5", date: d(-2), amount: 600, unit: "Agency", projectId: "pr-contable", concept: "Saldo", note: "" },
+    { id: "c6", date: d(-18), amount: 700, unit: "Agency", projectId: "pr-voz", concept: "Seña", note: "" },
+    { id: "c7", date: d(-1), amount: 250, unit: "Media", projectId: null, concept: "Otro", note: "Edición de reel puntual" },
   ];
 
   const subscriptions = [
-    { id: "s1", client: "Clínica · mantenimiento", unit: "Agency", amount: 120, since: d(-1), active: true },
+    { id: "s1", client: "Consultorio · mantenimiento web", unit: "Agency", amount: 90, since: d(-40), active: true, projectId: null },
   ];
 
-  return { version: 1, settings: SETTINGS, prospects, batches, projects, payments, subscriptions };
+  return { version: 2, example: true, settings: SETTINGS, prospects, batches, projects, payments, subscriptions };
+}
+
+export function emptyData() {
+  return { version: 2, example: false, settings: SETTINGS, prospects: [], batches: [], projects: [], payments: [], subscriptions: [] };
 }
