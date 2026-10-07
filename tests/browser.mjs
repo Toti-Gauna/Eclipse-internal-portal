@@ -48,6 +48,14 @@ try {
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   assert.equal((await saved()).version, 3);
   assert.equal(await page.locator('[aria-labelledby="today-title"] .pt-row').count(), 5);
+  const agendaFrame = await page.evaluate(() => ({
+    top: getComputedStyle(document.querySelector(".agenda-rows")).borderTopWidth,
+    heading: getComputedStyle(document.querySelector(".agenda-rows-head")).borderBottomWidth,
+    accents: [...document.querySelectorAll(".agenda-rows .pt-row")].map((row) => getComputedStyle(row).boxShadow),
+  }));
+  assert.equal(agendaFrame.top, "0px");
+  assert.equal(agendaFrame.heading, "0px");
+  assert.ok(agendaFrame.accents.every((shadow) => shadow === "none"));
   const initialRows = await page.locator('[aria-labelledby="today-title"] .pt-row-name').allTextContents();
   await page.locator('[data-action="page"][data-id="today"][data-kind="2"]').click();
   assert.equal(await page.locator('[aria-labelledby="today-title"] .pt-row').count(), 5);

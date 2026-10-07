@@ -42,6 +42,10 @@
   color-scheme: light;
 }
 html, body { background: var(--bg); }
+.agenda-rows, .agenda-rows-head { border-top: 0; border-bottom: 0; }
+.agenda-rows .pt-row[data-late], .agenda-rows .pt-row[data-turn] { box-shadow: none; padding-left: 0; }
+.agenda-rows .pt-row { padding-left: 0; padding-right: 0; }
+.agenda-rows-head { padding-inline: 0; }
 body { line-height: 1.5; }
 .pt-header { background: var(--header-bg); }
 .pt-main { padding-bottom: 48px; }
