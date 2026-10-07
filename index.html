@@ -1,18 +1,36 @@
 <!doctype html>
-<html lang="es-AR">
+<html lang="es-AR" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f4efe6" />
+    <meta name="theme-color" content="#05050a" />
     <meta name="description" content="Operación interna de Eclipse: prospectos, lotes, proyectos y cobros." />
     <meta name="robots" content="noindex" />
     <title>Eclipse · Operación interna</title>
+    <script>
+      (function () {
+        try { document.documentElement.dataset.theme = localStorage.getItem('eclipse-theme') === 'light' ? 'light' : 'dark'; } catch (_) {}
+        document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'light' ? '#f4efe6' : '#05050a';
+        document.documentElement.dataset.loader = 'on';
+        window.__eclipseLoaderAt = performance.now();
+      })();
+    </script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='%23111114'/%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='%23f5b942' stroke-width='1.4'/%3E%3Ccircle cx='18.4' cy='5.6' r='1.6' fill='%23f5b942'/%3E%3C/svg%3E" />
     <link rel="preload" href="./assets/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./assets/fonts/InstrumentSerif-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./loader.css" />
+    <link rel="stylesheet" href="./workspace.css" />
   </head>
   <body>
+    <div class="loader" aria-hidden="true">
+      <div class="loader-sky"><div class="loader-scene">
+        <div class="loader-eclipse"><span class="loader-glow"></span><span class="loader-corona"></span><span class="loader-sun"></span><span class="loader-moon"></span><span class="loader-glint"></span></div>
+        <p class="loader-word"><span style="--i:0">E</span><span style="--i:1">C</span><span style="--i:2">L</span><span style="--i:3">I</span><span style="--i:4">P</span><span style="--i:5">S</span><span style="--i:6">E</span></p>
+        <p class="loader-line">Hecho a medida de tu negocio.</p>
+      </div></div>
+    </div>
+    <script src="./src/boot.js"></script>
     <a class="skip-link" href="#main-content">Saltar al contenido</a>
     <div id="app"></div>
     <noscript>El portal necesita JavaScript.</noscript>

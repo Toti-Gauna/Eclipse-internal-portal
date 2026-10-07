@@ -1,0 +1,299 @@
+/*
+ * Loader v2 — the trailers' end card (components/trailers SceneLogo, trailer.css
+ * .trl-logo) as the loading screen, then an occultation reveal of the page.
+ * Pure CSS: the head script sets html[data-loader="on"] on every full page load;
+ * without JS the loader never shows. "skip" (any click / tap / key / wheel) fades it
+ * at once; "done" removes the layer. Timings: constants.ts.
+ *
+ * Every element's resting style is its final frame (what reduced motion shows);
+ * keyframes only say where things come from. Only transform and opacity animate,
+ * so the whole sequence runs on the compositor even while the page hydrates.
+ */
+.loader {
+  display: none;
+}
+
+html[data-loader='on'] .loader,
+html[data-loader='skip'] .loader {
+  --e: clamp(150px, 44vmin, 250px); /* eclipse box */
+  --cy: 42%; /* eclipse centre, from the top of the screen */
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: block;
+  overflow: hidden;
+  pointer-events: auto;
+  animation: loader-off 0.01s linear 1.78s forwards;
+}
+
+/* The skip: a quick fade, keeping the layer hit-testable until it is gone so the
+   click that skipped it doesn't land on the page underneath. */
+html[data-loader='skip'] .loader {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    visibility 0s linear 0.18s;
+}
+
+/*
+ * The night sky is a disc bigger than any screen (radius 80vmax ≥ the farthest corner
+ * from the eclipse), lit at its limb. At the end the whole loading screen dissolves —
+ * the sky fades and the eclipse + wordmark blur out in place — and the page appears
+ * under it (nothing flies off to a corner).
+ */
+.loader-sky {
+  position: absolute;
+  left: 50%;
+  top: var(--cy);
+  width: 160vmax;
+  height: 160vmax;
+  margin: -80vmax 0 0 -80vmax;
+  border-radius: 50%;
+  background: var(--void);
+  box-shadow:
+    0 0 0 1px rgb(255 240 205 / 0.6),
+    0 0 34px 6px rgb(255 232 176 / 0.5),
+    0 0 130px 40px rgb(245 185 66 / 0.2);
+  animation: loader-dissolve 0.6s ease-in-out 1.18s forwards;
+}
+/* A few faint stars, fading with the sky. */
+.loader-sky::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  box-shadow:
+    -41vmin -27vmin 0 0 rgb(244 239 230 / 0.42),
+    -24vmin -39vmin 0 -0.4px rgb(244 239 230 / 0.3),
+    31vmin -33vmin 0 0 rgb(244 239 230 / 0.36),
+    44vmin -12vmin 0 -0.4px rgb(244 239 230 / 0.28),
+    -47vmin 8vmin 0 -0.4px rgb(244 239 230 / 0.26),
+    39vmin 21vmin 0 0 rgb(244 239 230 / 0.3),
+    -33vmin 36vmin 0 -0.4px rgb(244 239 230 / 0.22),
+    18vmin 43vmin 0 -0.4px rgb(244 239 230 / 0.2),
+    9vmin -47vmin 0 -0.4px rgb(255 232 176 / 0.34),
+    -12vmin 49vmin 0 -0.4px rgb(244 239 230 / 0.18);
+}
+
+.loader-scene {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - var(--e) / 2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  transform: translateX(-50%);
+  text-align: center;
+  animation: loader-scene-out 0.6s ease-in 1.18s forwards;
+}
+
+/* ---- The eclipse (same construction as .trl-eclipse) ------------------ */
+.loader-eclipse {
+  position: relative;
+  flex: none;
+  width: var(--e);
+  height: var(--e);
+}
+.loader-eclipse > span {
+  position: absolute;
+  border-radius: 50%;
+}
+.loader-glow {
+  inset: -30%;
+  background: radial-gradient(closest-side, rgb(245 185 66 / 0.36) 30%, rgb(245 185 66 / 0.12) 55%, transparent 100%);
+  animation: loader-glow 0.9s var(--ease-expo) 0.62s both;
+}
+.loader-corona {
+  inset: 4%;
+  background:
+    radial-gradient(
+      closest-side,
+      transparent 52%,
+      rgb(255 248 230 / 1) 56%,
+      rgb(255 232 176 / 0.85) 60%,
+      rgb(245 185 66 / 0.35) 72%,
+      transparent 100%
+    ),
+    repeating-conic-gradient(
+      from 0deg,
+      rgb(255 232 176 / 0) 0deg 5deg,
+      rgb(255 232 176 / 0.3) 8deg,
+      rgb(255 232 176 / 0) 11deg 17deg
+    );
+  -webkit-mask-image: radial-gradient(closest-side, #000 60%, rgb(0 0 0 / 0.5) 80%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 60%, rgb(0 0 0 / 0.5) 80%, transparent 100%);
+  animation: loader-corona 0.95s var(--ease-expo) 0.66s both;
+}
+.loader-sun {
+  inset: 25%;
+  background: radial-gradient(circle, #fffaf0 0%, var(--flare) 55%, var(--corona) 100%);
+  box-shadow: 0 0 30px 6px rgb(255 232 176 / 0.45);
+  animation: loader-sun 0.45s var(--ease-expo) both;
+}
+.loader-moon {
+  inset: 24.5%;
+  background: radial-gradient(circle at 38% 34%, #0d0d16 0%, #050509 60%, #020204 100%);
+  animation: loader-moon 0.78s cubic-bezier(0.45, 0, 0.25, 1) 0.02s both;
+}
+/* Diamond ring: a bright bead on the limb where the moon covers the sun last (45°). */
+.loader-eclipse > .loader-glint {
+  left: 68%;
+  top: 32%;
+  width: 30%;
+  height: 30%;
+  margin: -15% 0 0 -15%;
+  border-radius: 0;
+  background: radial-gradient(
+    circle,
+    #fff 0 5%,
+    rgb(255 250 235 / 0.95) 9%,
+    rgb(255 236 190 / 0.45) 20%,
+    transparent 46%
+  );
+  opacity: 0.85;
+  transform: scale(0.72) rotate(12deg);
+  animation: loader-glint 0.62s cubic-bezier(0.2, 0.7, 0.3, 1) 0.74s both;
+}
+.loader-glint::before,
+.loader-glint::after {
+  content: '';
+  position: absolute;
+  left: -25%;
+  right: -25%;
+  top: 50%;
+  height: 1.5px;
+  margin-top: -0.75px;
+  background: linear-gradient(90deg, transparent, rgb(255 250 238 / 0.95) 50%, transparent);
+}
+.loader-glint::after {
+  transform: rotate(90deg);
+}
+
+/* ---- Wordmark + end line (as .trl-wordmark / .trl-endline) ------------ */
+.loader-word {
+  display: flex;
+  margin-top: clamp(10px, 2.4vmin, 26px);
+  padding-left: 0.5em; /* optically re-centre the tracked letters */
+  overflow: hidden;
+  font-size: clamp(15px, 1.2vmin + 10px, 22px);
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.5em;
+  color: var(--dawn);
+  white-space: nowrap;
+}
+.loader-word span {
+  display: inline-block;
+  animation: loader-letter 0.62s var(--ease-expo) both;
+  animation-delay: calc(0.38s + var(--i) * 45ms);
+}
+.loader-line {
+  margin-top: 0.85em;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: clamp(16px, 1.4vmin + 11px, 23px);
+  line-height: 1.25;
+  color: var(--mist);
+  animation: loader-rise 0.55s var(--ease-expo) 0.66s both;
+}
+
+/* ---- Keyframes --------------------------------------------------------- */
+@keyframes loader-sun {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+@keyframes loader-moon {
+  from {
+    transform: translate(-78%, 26%);
+  }
+}
+@keyframes loader-corona {
+  from {
+    opacity: 0;
+    transform: scale(0.72) rotate(-20deg);
+  }
+}
+@keyframes loader-glow {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes loader-glint {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-35deg);
+  }
+  32% {
+    opacity: 1;
+    transform: scale(1.18) rotate(0deg);
+  }
+  100% {
+    opacity: 0.85;
+    transform: scale(0.72) rotate(12deg);
+  }
+}
+@keyframes loader-letter {
+  from {
+    opacity: 0;
+    transform: translateY(90%);
+  }
+}
+@keyframes loader-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes loader-dissolve {
+  to {
+    opacity: 0;
+  }
+}
+/* The eclipse and the wordmark blur out in place (a small layer: cheap to blur), a touch
+   larger, as if the light diffused into the page. translateX keeps the scene centred. */
+@keyframes loader-scene-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+@keyframes loader-off {
+  to {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+@keyframes loader-fade {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+/* Reduced motion: the final frame, still, then a short fade (≤ 400 ms in all). */
+@media (prefers-reduced-motion: reduce) {
+  html[data-loader='on'] .loader {
+    animation: loader-fade 0.26s ease 0.12s forwards !important;
+  }
+  html[data-loader] .loader *,
+  html[data-loader] .loader *::before,
+  html[data-loader] .loader *::after {
+    animation: none !important;
+  }
+}
