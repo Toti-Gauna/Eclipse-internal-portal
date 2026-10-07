@@ -78,8 +78,9 @@ export const inRange = (iso, start, end) => iso >= start && iso <= end;
 
 // ---------- Prospectos ----------
 
+const eventInstant = (event) => Date.parse(event.occurredAt || `${event.date}T${event.time || "00:00"}:00`);
 const lastEvent = (prospect, type) =>
-  [...(prospect.events || [])].filter((event) => event.type === type).sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+  [...(prospect.events || [])].filter((event) => event.type === type).sort((a, b) => eventInstant(a) - eventInstant(b)).at(-1);
 
 export function proposalOf(prospect) {
   return lastEvent(prospect, "propuesta");
@@ -115,7 +116,7 @@ export function prospectNextAction(prospect) {
     case "propuesta": {
       const proposal = proposalOf(prospect);
       if (!proposal) return null;
-      const touches = prospect.events.filter((event) => event.type === "toque" && event.date >= proposal.date).length;
+      const touches = prospect.events.filter((event) => event.type === "toque" && eventInstant(event) >= eventInstant(proposal)).length;
       if (touches < TOUCH_OFFSETS.length) {
         const offset = TOUCH_OFFSETS[touches];
         return { kind: "toque", title: `Toque ${touches + 1} de 3 (+${offset} días de la propuesta)`, due: addDays(proposal.date, offset) };
@@ -136,8 +137,8 @@ export function prospectNextAction(prospect) {
 /** Lote: D0 envío · D+2 señal · D+7 cierre e informe. */
 export function batchNextAction(batch) {
   if (batch.report) return null;
-  if (!batch.signal) return { kind: "señal", title: "Leer la señal del lote (D+2)", due: addDays(batch.sentAt, 2) };
-  return { kind: "cierre", title: "Cerrar el lote con informe de 3 líneas (D+7)", due: addDays(batch.sentAt, 7) };
+  if (!batch.signal) return { kind: "señal", title: `Leer la señal del lote (D+${batch.signalDays || 2})`, due: addDays(batch.sentAt, batch.signalDays || 2) };
+  return { kind: "cierre", title: `Cerrar el lote con informe de 3 líneas (D+${batch.closeDays || 7})`, due: addDays(batch.sentAt, batch.closeDays || 7) };
 }
 
 export function batchStats(batch, prospects) {
@@ -190,7 +191,7 @@ export function projectNextAction(project, payments) {
   if (project.clientAction) {
     return { kind: "cliente", title: `Seguir al cliente: ${project.clientAction.title}`, due: addDays(project.clientAction.requestedOn, 2) };
   }
-  if (project.milestone) return { kind: "hito", title: project.milestone.title, due: project.milestone.due };
+  if (project.milestone) return { kind: "hito", title: project.milestone.title, due: project.milestone.due, time: project.milestone.time || "" };
   return null;
 }
 

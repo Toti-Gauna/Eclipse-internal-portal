@@ -1,4 +1,7 @@
 import { clear, load, newId, normalize, reset, save } from "./data/store.js";
+import { auditStamp, chronological, dailyAgenda, goalProgress, localTime, salesPlan, toggleGoalStep } from "./planner.js";
+import { GENERATORS, generatorConfig, renderGenerator } from "./generators.js";
+import { workspaceUI } from "./workspace-ui.js";
 import {
   MAIN_STAGES, OPEN_STAGES, PAYMENT_CONCEPTS, PROSPECT_PATH, PROSPECT_STAGES, SOURCES, STAGES, UNITS,
   addDays, agenda, batchNextAction, batchStats, bimesterProgress, closeout, currentBimester, diffDays, fiveNumbers,
@@ -8,6 +11,7 @@ import {
 
 const NAV = [
   { id: "hoy", label: "Hoy" },
+  { id: "calendario", label: "Calendario" },
   { id: "prospectos", label: "Prospectos" },
   { id: "lotes", label: "Lotes" },
   { id: "proyectos", label: "Proyectos" },
@@ -23,7 +27,13 @@ const state = {
   },
   tab: "updates",
   modal: null,
+  wizard: null,
+  pages: {},
+  goalFilter: "hoy",
+  calendar: { month: todayISO().slice(0, 7), date: todayISO(), filter: "todo", eventId: null },
+  calculator: { gap: "", ticket: 1500, conversion: 25, hours: 20, amount: 1000 },
 };
+state.calculator.gap = Math.max(0, bimesterProgress(state.data).goal - bimesterProgress(state.data).collected);
 
 function commit(message, tone = "success") {
   const saved = save(state.data);
@@ -41,6 +51,9 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   data: '<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/>',
   circle: '<circle cx="12" cy="12" r="7.5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/>',
+  moon: '<path d="M20.5 13.3A8.7 8.7 0 0 1 10.7 3.5a8.7 8.7 0 1 0 9.8 9.8Z"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
 };
 
 function icon(name) {
@@ -82,6 +95,19 @@ function fmtDate(iso, withYear = false) {
   return `${String(d).padStart(2, "0")} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ""}`;
 }
 const date = (iso, withYear) => `<span class="pt-date">${fmtDate(iso, withYear)}</span>`;
+const dateTime = (entry) => `${fmtDate(entry.date, true)}<small class="log-time">${entry.time ? esc(entry.time) : "Hora no registrada"}</small>`;
+
+const PAGE_SIZE = 5;
+function pageSlice(items, group) {
+  const total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  state.pages[group] = Math.max(1, Math.min(total, state.pages[group] || 1));
+  return items.slice((state.pages[group] - 1) * PAGE_SIZE, state.pages[group] * PAGE_SIZE);
+}
+function pagination(items, group) {
+  const total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const page = Math.max(1, Math.min(total, state.pages[group] || 1));
+  return `<nav class="pagination" aria-label="Páginas de ${esc(group)}"><span class="pt-fine">${items.length ? (page - 1) * PAGE_SIZE + 1 : 0}–${Math.min(items.length, page * PAGE_SIZE)} de ${items.length}</span><div>${btn("page", icon("back"), "btn-ghost icon-button", `data-id="${group}" data-kind="${page - 1}" aria-label="Página anterior" ${page === 1 ? "disabled" : ""}`)}<span class="readout">${page} / ${total}</span>${btn("page", icon("arrow"), "btn-ghost icon-button", `data-id="${group}" data-kind="${page + 1}" aria-label="Página siguiente" ${page === total ? "disabled" : ""}`)}</div></nav>`;
+}
 
 function dueTag(due) {
   const delta = diffDays(todayISO(), due);
@@ -141,15 +167,16 @@ function prospectMark(prospect, { layout = "inline", size = 18 } = {}) {
 function routeInfo() {
   const raw = window.location.hash.replace(/^#\/?/, "") || "hoy";
   const [view, id] = raw.split("/");
-  return { view: NAV.some((item) => item.id === view) ? view : "hoy", id: id ? decodeURIComponent(id) : "" };
+  return { view: NAV.some((item) => item.id === view) || ["metas", "herramientas", "actividad", "crear"].includes(view) ? view : "hoy", id: id ? decodeURIComponent(id) : "" };
 }
 
 function navLinks(active) {
-  const due = agenda(state.data).filter((item) => item.delta <= 0).length;
+  const due = dailyAgenda(state.data).filter((item) => item.delta <= 0).length;
   return `<ul>${NAV.map((item) => `<li><a class="hdr-link" href="#${item.id}"${item.id === active ? ' aria-current="page"' : ""}>${item.label}${item.id === "hoy" && due ? `<span class="hdr-count" aria-label="${due} pendientes">${due}</span>` : ""}</a></li>`).join("")}</ul>`;
 }
 
 function shell(inner, active) {
+  const dark = document.documentElement.dataset.theme !== "light";
   const notice = state.data.example
     ? `<div class="pt-notice"><div class="container-x pt-notice-row"><span class="badge-demo">Ejemplo</span><p class="pt-notice-text">Estás viendo datos de ejemplo: negocios ficticios para probar el flujo. Se guardan solo en este navegador.</p><button class="pt-link" type="button" data-action="start-clean">Empezar con mis datos</button></div></div>`
     : "";
@@ -158,7 +185,7 @@ function shell(inner, active) {
         <a class="pt-brand" href="#hoy" aria-label="Eclipse · Hoy">${phaseGlyph(1, 22)}<span class="pt-brand-name">ECLIPSE</span></a>
         <span class="pt-brand-label">Operación interna</span>
         <nav class="pt-nav pt-nav-desktop" aria-label="Secciones">${navLinks(active)}</nav>
-        <div class="pt-tools"><span class="hdr-rule" aria-hidden="true"></span><button class="hdr-link" type="button" data-action="open-data">${icon("data")}Datos</button></div>
+        <div class="pt-tools"><span class="hdr-rule" aria-hidden="true"></span><button class="hdr-plan" type="button" data-action="new-goal">${icon("plus")}<span>Planificar</span></button><button class="hdr-link theme-toggle" type="button" data-action="theme-toggle" aria-label="${dark ? "Activar modo claro" : "Activar modo oscuro"}" title="${dark ? "Modo claro" : "Modo oscuro"}">${icon(dark ? "sun" : "moon")}</button><details class="workspace-menu"><summary class="hdr-link" aria-label="Herramientas de operación" title="Herramientas de operación">${icon("more")}</summary><nav aria-label="Mi operación"><a href="#metas">Mi plan<span>Metas y próximos pasos</span></a><a href="#herramientas">Herramientas<span>Ventas, capacidad y cobros</span></a><a href="#actividad">Bitácora<span>Actividad y auditoría</span></a><button type="button" data-action="open-data">Datos y respaldos<span>Exportar o importar</span></button></nav></details></div>
       </div>
       <div class="pt-nav-row"><nav class="pt-nav" aria-label="Secciones">${navLinks(active)}</nav></div>
     </header>
@@ -167,6 +194,7 @@ function shell(inner, active) {
       ${notice}
       <div class="container-x pt-page">${inner}</div>
     </main>
+    <footer class="workspace-footer container-x"><span class="label">Eclipse · Tu operación en órbita</span><nav aria-label="Herramientas de operación"><a href="#metas">Mi plan</a><a href="#herramientas">Herramientas</a><a href="#actividad">Bitácora</a></nav></footer>
     <div class="toast-region" aria-live="polite"></div>`;
 }
 
@@ -176,7 +204,7 @@ function emptyState(title, body, action = "") {
 
 // ---------- Hoy ----------
 
-const ENTITY = { prospect: ["prospectos", "Prospecto"], batch: ["lotes", "Lote"], project: ["proyectos", "Proyecto"] };
+const ENTITY = { prospect: ["prospectos", "Prospecto"], batch: ["lotes", "Lote"], project: ["proyectos", "Proyecto"], goal: ["metas", "Meta"], event: ["calendario", "Evento"] };
 
 function agendaButton(item) {
   const a = dataAttrs(item.id);
@@ -188,6 +216,8 @@ function agendaButton(item) {
     case "batch:cierre": return btn("batch-close", "Cerrar lote", "btn-ink", a);
     case "project:cobro": return btn("new-payment", "Registrar cobro", "btn-ink", a);
     case "project:referido": return btn("project-referral", "Referido pedido", "btn-ink", a);
+    case "goal:meta": return openLink(`#metas/${encodeURIComponent(item.id)}`, "Ver pasos");
+    case "event:evento": return openLink(`#calendario/${encodeURIComponent(item.id)}`, "Ver evento");
     default: return openLink(`#${ENTITY[item.entity][0]}/${encodeURIComponent(item.id)}`);
   }
 }
@@ -200,7 +230,7 @@ function agendaRows(items) {
     return `<li class="pt-row" style="--cols:${cols}"${item.delta < 0 ? " data-late" : item.delta === 0 ? " data-turn" : ""}>
       <div><span class="pt-row-name">${esc(item.title)}</span></div>
       <div><a class="pt-link" style="min-height:0" href="#${route}/${encodeURIComponent(item.id)}">${esc(item.name)}</a><span class="pt-meta">${type} · ${esc(item.unit)}</span></div>
-      <div>${dueTag(item.due)}</div>
+      <div>${dueTag(item.due)}${item.time ? `<span class="pt-meta readout">${esc(item.time)}</span>` : ""}</div>
       <div class="pt-row-end">${agendaButton(item)}</div>
     </li>`;
   }).join("")}</ul>`;
@@ -208,7 +238,7 @@ function agendaRows(items) {
 
 function renderHoy() {
   const today = todayISO();
-  const items = agenda(state.data, today);
+  const items = dailyAgenda(state.data, today);
   const now = items.filter((item) => item.delta <= 0);
   const late = now.filter((item) => item.delta < 0).length;
   const soon = items.filter((item) => item.delta > 0 && item.delta <= 7);
@@ -224,6 +254,7 @@ function renderHoy() {
     <div class="pt-kicker"><span class="label">${esc(progress.bimester.label)}</span><span class="label">${esc(weekday)}</span></div>
     <h1 class="display pt-hello">Hola, ${esc(state.data.settings.owner)}.</h1>
     <p class="pt-company">${now.length ? `Hoy tenés <strong>${now.length} ${now.length === 1 ? "cosa" : "cosas"}</strong> para hacer${late ? `, <strong>${late} vencida${late === 1 ? "" : "s"}</strong>` : ""}.` : "No hay nada vencido ni para hoy."} El bimestre va <strong>${ahead ? "arriba" : "debajo"} del ritmo</strong>.</p>
+    ${workspace.focusBand()}
 
     <dl class="pt-overview">
       <div><dt>Cobrado en el bimestre</dt><dd>
@@ -244,13 +275,14 @@ function renderHoy() {
     </dl>
 
     <section class="pt-list" aria-labelledby="today-title">
-      <div class="pt-list-head"><div class="pt-list-title"><h2 id="today-title" class="pt-h2">Qué toca hoy</h2><span class="pt-count">${now.length}</span></div><p class="pt-fine">Vencido y del día, según las reglas de prospecto, lote y proyecto.</p></div>
-      ${now.length ? agendaRows(now) : emptyState("Nada pendiente para hoy", "Buen momento para prospectar: la prospección nunca baja del 20% de la capacidad.", `<a class="pt-link" href="#lotes">Armar un lote ${icon("arrow")}</a>`)}
+      <div class="pt-list-head"><div class="pt-list-title"><h2 id="today-title" class="pt-h2">Qué toca hoy</h2><span class="pt-count">${now.length}</span></div><div class="pt-head-actions"><a class="pt-link" href="#metas">Mi plan ${icon("arrow")}</a>${btn("new-goal", `${icon("plus")} Meta`, "btn-ghost")}</div></div>
+      <p class="pt-fine">Tus metas, eventos y acciones pendientes. Cinco por página para mantener el foco.</p>
+      ${now.length ? `${agendaRows(pageSlice(now, "today"))}${pagination(now, "today")}` : emptyState("Nada pendiente para hoy", "Buen momento para prospectar: la prospección nunca baja del 20% de la capacidad.", `<a class="pt-link" href="#lotes">Armar un lote ${icon("arrow")}</a>`)}
     </section>
 
     <section class="pt-list" aria-labelledby="soon-title">
       <div class="pt-list-head"><div class="pt-list-title"><h2 id="soon-title" class="pt-h2">Próximos 7 días</h2><span class="pt-count">${soon.length}</span></div></div>
-      ${soon.length ? agendaRows(soon) : `<p class="pt-fine">Sin acciones programadas.</p>`}
+      ${soon.length ? `${agendaRows(pageSlice(soon, "soon"))}${pagination(soon, "soon")}` : `<p class="pt-fine">Sin acciones programadas.</p>`}
     </section>
 
     <section class="pt-list" aria-labelledby="numbers-title">
@@ -356,7 +388,7 @@ function renderProspectDetail(id) {
   const next = prospectNextAction(prospect);
   const batch = prospect.batchId ? find("batches", prospect.batchId) : null;
   const proposal = proposalOf(prospect);
-  const events = prospect.events.map((event, index) => ({ event, index })).sort((a, b) => b.event.date.localeCompare(a.event.date) || b.index - a.index).map(({ event }) => event);
+  const events = chronological(prospect.events);
   const position = prospectPosition(prospect);
   const muted = ["perdido", "pausado"].includes(prospect.stage);
   const pause = [...prospect.events].reverse().find((event) => event.type === "pausa");
@@ -401,8 +433,8 @@ function renderProspectDetail(id) {
     <div class="pt-bottom">
       <section aria-labelledby="log-title">
         <div class="pt-section-head"><h2 id="log-title" class="pt-h2">Historial</h2><span class="pt-count">${events.length}</span></div>
-        <p class="pt-fine">Cada contacto con fecha. Lo último arriba.</p>
-        <ol class="pt-log" style="margin-top:24px">${events.map((event) => `<li class="pt-log-item"${STAGE_EVENTS[event.type] ? " data-change" : ""}><span class="pt-log-date pt-date">${fmtDate(event.date, true)}</span><div class="pt-log-body"><p class="pt-log-title">${esc(EVENT_LABELS[event.type] || event.type)}${event.amount ? ` · <span class="readout">${usd(event.amount)}</span>` : ""}</p>${event.note ? `<p class="pt-log-text">${esc(event.note)}</p>` : ""}${event.reviewDate ? `<p class="pt-log-author">Revisar el ${fmtDate(event.reviewDate, true)}</p>` : ""}</div></li>`).join("")}</ol>
+        <p class="pt-fine">Del primer contacto al más reciente, con fecha y hora.</p>
+        <ol class="pt-log" style="margin-top:24px">${events.map((event) => `<li class="pt-log-item"${STAGE_EVENTS[event.type] ? " data-change" : ""}><span class="pt-log-date pt-date">${dateTime(event)}</span><div class="pt-log-body"><p class="pt-log-title">${esc(EVENT_LABELS[event.type] || event.type)}${event.amount ? ` · <span class="readout">${usd(event.amount)}</span>` : ""}</p>${event.note ? `<p class="pt-log-text">${esc(event.note)}</p>` : ""}${event.reviewDate ? `<p class="pt-log-author">Revisar el ${fmtDate(event.reviewDate, true)}</p>` : ""}</div></li>`).join("")}</ol>
       </section>
       <aside class="pt-facts" aria-label="Datos del prospecto">
         <span class="label">Datos del prospecto</span>
@@ -422,7 +454,7 @@ function renderProspectDetail(id) {
 // ---------- Lotes ----------
 
 function batchRail(batch) {
-  const steps = [["D0", "Envío", batch.sentAt, true], ["D+2", "Señal", addDays(batch.sentAt, 2), !!batch.signal], ["D+7", "Cierre e informe", addDays(batch.sentAt, 7), !!batch.report]];
+  const steps = [["D0", "Envío", batch.sentAt, true], [`D+${batch.signalDays || 2}`, "Señal", addDays(batch.sentAt, batch.signalDays || 2), !!batch.signal], [`D+${batch.closeDays || 7}`, "Cierre e informe", addDays(batch.sentAt, batch.closeDays || 7), !!batch.report]];
   const currentIndex = steps.findIndex(([, , , done]) => !done);
   return `<ol class="pt-rail">${steps.map(([n, name, day, done], i) => {
     const status = done ? "done" : i === currentIndex ? "current" : "pending";
@@ -437,10 +469,11 @@ function batchCard(batch, full = false) {
   return `<li class="pt-card"${next && isLate(next.due) ? " data-late" : next && isDue(next.due) ? " data-turn" : ""}>
     <div class="pt-card-top"><span class="label">${esc(batch.unit)} · ${esc(batch.vertical)}</span>${batch.report ? `<span class="pt-tag pt-tag-ok">${icon("check")} Cerrado</span>` : next ? dueTag(next.due) : ""}</div>
     <div><h3 class="pt-card-title">${full ? esc(batch.name) : `<a class="pt-row-name" href="#lotes/${encodeURIComponent(batch.id)}">${esc(batch.name)}</a>`}</h3><p class="pt-meta">${esc(batch.demo)}</p></div>
+    ${batch.hypothesis ? `<p class="pt-fine"><strong>Hipótesis:</strong> ${esc(batch.hypothesis)}</p>` : ""}
     ${batchRail(batch)}
-    <p class="pt-stats"><span><b>${stats.size}</b> contactos</span><span><b>${stats.responded}</b> respondieron</span><span><b>${stats.proposals}</b> propuestas</span><span><b>${stats.won}</b> señas</span></p>
-    ${batch.signal ? `<p class="pt-fine"><strong>Señal D+2:</strong> ${esc(batch.signal.note)}</p>` : ""}
-    ${batch.report ? `<ul class="pt-report"><li><b>Funcionó:</b> ${esc(batch.report.worked)}</li><li><b>No funcionó:</b> ${esc(batch.report.notWorked)}</li><li><b>Próxima vez:</b> ${esc(batch.report.change)}</li></ul>` : ""}
+    <p class="pt-stats"><span><b>${stats.size}${batch.target ? `/${batch.target}` : ""}</b> contactos</span><span><b>${stats.responded}</b> respondieron</span><span><b>${stats.proposals}</b> propuestas</span><span><b>${stats.won}</b> señas</span></p>
+    ${batch.signal ? `<p class="pt-fine"><strong>Señal D+${batch.signalDays || 2}:</strong> ${esc(batch.signal.note)}<span class="log-time">${dateTime(batch.signal)}</span></p>` : ""}
+    ${batch.report ? `<ul class="pt-report"><li><b>Funcionó:</b> ${esc(batch.report.worked)}</li><li><b>No funcionó:</b> ${esc(batch.report.notWorked)}</li><li><b>Próxima vez:</b> ${esc(batch.report.change)}</li><li class="pt-fine">${dateTime(batch.report)}</li></ul>` : ""}
     ${batch.report ? "" : `<div class="pt-actions" style="margin-top:0">${!batch.signal ? btn("batch-signal", "Registrar señal", "btn-ink", a) : btn("batch-close", "Cerrar con informe", "btn-ink", a)}${btn("new-prospect", "Sumar contacto", "btn-ghost", a)}</div>`}
   </li>`;
 }
@@ -576,13 +609,13 @@ function renderProjectDetail(id) {
   const muted = ["paused", "closed"].includes(project.stage);
   const stageInfo = STAGES[project.stage];
   const currentSpan = (project.history || []).at(-1);
-  const payments = state.data.payments.filter((payment) => payment.projectId === project.id).sort((x, y) => y.date.localeCompare(x.date));
+  const payments = chronological(state.data.payments.filter((payment) => payment.projectId === project.id));
   const paid = projectPaid(project, state.data.payments);
   const balance = projectBalance(project, state.data.payments);
   const done = closeout(project, state.data.payments);
   const next = projectNextAction(project, state.data.payments);
   const prospect = project.prospectId ? find("prospects", project.prospectId) : null;
-  const updates = [...(project.updates || [])].sort((x, y) => y.date.localeCompare(x.date));
+  const updates = chronological(project.updates || []);
   const tab = state.tab;
 
   const closeoutBox = project.stage === "delivery" || done.delivered
@@ -630,7 +663,7 @@ function renderProjectDetail(id) {
         ${["closed"].includes(project.stage) ? "" : `<section class="pt-box"${project.clientAction ? " data-turn" : ""}>
           <div class="pt-box-head"><span class="label">Acción del cliente</span>${project.clientAction ? `<span class="pt-tag pt-tag-attn">Le toca al cliente</span>` : ""}</div>
           <p class="pt-box-title">${project.clientAction ? esc(project.clientAction.title) : "Nada pendiente de su lado"}</p>
-          <p class="pt-fine">${project.clientAction ? `Pedido el ${fmtDate(project.clientAction.requestedOn, true)}. Si no responde en 2 días, aparece en Hoy.` : "Si necesitás una aprobación, insumo o confirmación, pedila acá."}</p>
+          <p class="pt-fine">${project.clientAction ? `Pedido el ${fmtDate(project.clientAction.requestedOn, true)}${project.clientAction.time ? ` · ${esc(project.clientAction.time)}` : ""}. Si no responde en 2 días, aparece en Hoy.` : "Si necesitás una aprobación, insumo o confirmación, pedila acá."}</p>
           <div class="pt-actions">${project.clientAction ? btn("client-action-done", "Resuelta", "btn-ink", a) : btn("client-action", "Pedir acción", "btn-ghost", a)}</div>
         </section>`}
       </aside>
@@ -642,15 +675,15 @@ function renderProjectDetail(id) {
     <div class="pt-bottom">
       <section aria-labelledby="track-title">
         <div class="pt-section-head"><h2 id="track-title" class="pt-h2">Seguimiento</h2>${tab === "updates" ? btn("project-update", `${icon("plus")} Actualización`, "btn-ghost", a) : btn("new-payment", `${icon("plus")} Cobro`, "btn-ghost", a)}</div>
-        <p class="pt-fine">Las actualizaciones son las que lee el cliente en su portal. Los cobros son internos.</p>
+        <p class="pt-fine">Del inicio al avance más reciente. Cada actividad conserva su fecha y hora.</p>
         <div class="pt-tablist" role="tablist" aria-label="Seguimiento">
           <button class="pt-tab" role="tab" type="button" aria-selected="${tab === "updates"}" data-action="tab" data-id="updates">Actualizaciones <span class="pt-tab-count">${updates.length}</span></button>
           <button class="pt-tab" role="tab" type="button" aria-selected="${tab === "payments"}" data-action="tab" data-id="payments">Cobros <span class="pt-tab-count">${payments.length}</span></button>
         </div>
         <div class="pt-tabpanel" role="tabpanel">
           ${tab === "updates"
-            ? updates.length ? `<ol class="pt-log">${updates.map((u) => `<li class="pt-log-item"${u.stageChange ? " data-change" : ""}><span class="pt-log-date pt-date">${fmtDate(u.date, true)}</span><div class="pt-log-body">${u.stageChange ? `<p class="pt-log-change">${u.stageChange.from ? `Cambio de etapa <b>${esc(STAGES[u.stageChange.from]?.name || "")}</b> → <b>${esc(STAGES[u.stageChange.to]?.name || "")}</b>` : `Inicio del proyecto <b>${esc(STAGES[u.stageChange.to]?.name || "")}</b>`}</p>` : ""}<p class="pt-log-title">${esc(u.title)}</p>${u.body ? `<p class="pt-log-text">${esc(u.body)}</p>` : ""}<p class="pt-log-author">Eclipse</p></div></li>`).join("")}</ol>` : `<p class="pt-fine">Sin actualizaciones.</p>`
-            : payments.length ? `<ul class="pt-ledger">${payments.map((p) => `<li><span class="pt-date">${fmtDate(p.date, true)}</span><span>${esc(p.concept)}${p.note ? ` · <span class="pt-meta" style="display:inline">${esc(p.note)}</span>` : ""}</span><span class="pt-leader"></span><span class="readout">${usd(p.amount)}</span></li>`).join("")}</ul>` : `<p class="pt-fine">Sin cobros.</p>`}
+            ? updates.length ? `<ol class="pt-log">${updates.map((u) => `<li class="pt-log-item"${u.stageChange ? " data-change" : ""}><span class="pt-log-date pt-date">${dateTime(u)}</span><div class="pt-log-body">${u.stageChange ? `<p class="pt-log-change">${u.stageChange.from ? `Cambio de etapa <b>${esc(STAGES[u.stageChange.from]?.name || "")}</b> → <b>${esc(STAGES[u.stageChange.to]?.name || "")}</b>` : `Inicio del proyecto <b>${esc(STAGES[u.stageChange.to]?.name || "")}</b>`}</p>` : ""}<p class="pt-log-title">${esc(u.title)}</p>${u.body ? `<p class="pt-log-text">${esc(u.body)}</p>` : ""}<p class="pt-log-author">Eclipse</p></div></li>`).join("")}</ol>` : `<p class="pt-fine">Sin actualizaciones.</p>`
+            : payments.length ? `<ul class="pt-ledger">${payments.map((p) => `<li><span class="pt-date">${dateTime(p)}</span><span>${esc(p.concept)}${p.note ? ` · <span class="pt-meta" style="display:inline">${esc(p.note)}</span>` : ""}</span><span class="pt-leader"></span><span class="readout">${usd(p.amount)}</span></li>`).join("")}</ul>` : `<p class="pt-fine">Sin cobros.</p>`}
         </div>
       </section>
       <aside class="pt-facts" aria-label="Datos del proyecto">
@@ -716,7 +749,7 @@ function renderCobros() {
       <ul class="pt-rows">${payments.map((payment) => {
         const project = payment.projectId ? find("projects", payment.projectId) : null;
         return `<li class="pt-row" style="--cols:${cols}">
-          <div class="pt-date">${fmtDate(payment.date, true)}</div>
+          <div class="pt-date">${dateTime(payment)}</div>
           <div>${esc(payment.concept)}${payment.note ? `<span class="pt-meta">${esc(payment.note)}</span>` : ""}</div>
           <div>${project ? `<a class="pt-link" style="min-height:0" href="#proyectos/${encodeURIComponent(project.id)}">${esc(project.name)}</a>` : `<span class="pt-meta" style="margin:0">Sin proyecto</span>`}</div>
           <div>${esc(payment.unit)}</div>
@@ -738,6 +771,9 @@ const select = (name, label, list, selected, empty) =>
 const row = (...fields) => `<div class="pt-form-row">${fields.join("")}</div>`;
 
 function modalShell(kicker, title, text, body, submit) {
+  if (submit) {
+    body += row(body.includes('name="date"') ? "" : field("date", "Fecha de actividad", "date", todayISO()), field("time", "Hora local", "time", localTime()));
+  }
   return `<dialog id="interaction-modal" class="modal ticks" aria-labelledby="modal-title"><div class="modal-content">
     <span class="label">${esc(kicker)}</span>
     <h2 id="modal-title" class="modal-title">${esc(title)}</h2>
@@ -762,7 +798,6 @@ const EVENT_MODALS = {
 function modalMarkup() {
   const modal = state.modal;
   const today = todayISO();
-  const units = (selected) => select("unit", "Unidad", UNITS, selected || "Agency");
 
   switch (modal.type) {
     case "prospect-event": {
@@ -775,28 +810,10 @@ function modalMarkup() {
       body += area("note", modal.kind === "perdido" ? "Motivo" : modal.kind === "pausa" ? "Causa" : "Nota", "", noteRequired);
       return modalShell(prospect?.name || "Prospecto", title, hint, body, "Guardar");
     }
-    case "new-prospect": {
-      const batch = modal.id ? find("batches", modal.id) : null;
-      const openBatches = state.data.batches.filter((item) => !item.report).map((item) => [item.id, item.name]);
-      return modalShell("Prospectos", "Nuevo prospecto", "Queda en Contactado. Cuando responda, registralo y arranca la regla.", [
-        field("name", "Negocio o persona"),
-        row(field("contact", "Contacto / canal", "text", "", 'required placeholder="WhatsApp, email, Upwork…"'), select("source", "Fuente", SOURCES, batch ? "Lote" : "Upwork")),
-        row(units(batch?.unit), select("batchId", "Lote", openBatches, batch?.id || "", "Sin lote")),
-        area("need", "Necesidad", "", 'required placeholder="Problema concreto, si se puede cuantificado"'),
-        row(field("offer", "Oferta sugerida", "text", "", 'placeholder="USD 600–900"'), field("createdAt", "Primer contacto", "date", today)),
-      ].join(""), "Crear prospecto");
-    }
-    case "new-batch":
-      return modalShell("Lotes", "Nuevo lote", "Lote chico, demo personalizada. D0 es el día de envío.", [
-        field("name", "Nombre", "text", "", 'required placeholder="Vertical · demo"'),
-        row(field("vertical", "Vertical"), units()),
-        field("demo", "Demo base", "text", "", 'required placeholder="Demo base — Agente de atención"'),
-        field("sentAt", "D0 · envío", "date", today),
-      ].join(""), "Crear lote");
     case "batch-signal": {
       const batch = find("batches", modal.id);
       const stats = batch ? batchStats(batch, state.data.prospects) : { size: 0, responded: 0 };
-      return modalShell(batch?.name || "Lote", "Señal D+2", `${stats.responded} de ${stats.size} respondieron hasta ahora.`, area("note", "Qué señal hay", "", "required"), "Guardar señal");
+      return modalShell(batch?.name || "Lote", `Señal D+${batch?.signalDays || 2}`, `${stats.responded} de ${stats.size} respondieron hasta ahora.`, area("note", "Qué señal hay", "", "required"), "Guardar señal");
     }
     case "batch-close": {
       const batch = find("batches", modal.id);
@@ -804,33 +821,6 @@ function modalMarkup() {
         area("worked", "Qué funcionó", "", "required"), area("notWorked", "Qué no", "", "required"), area("change", "Qué cambio la próxima", "", "required"),
       ].join(""), "Cerrar lote");
     }
-    case "new-project": {
-      const prospect = modal.id ? find("prospects", modal.id) : null;
-      const total = proposalOf(prospect || { events: [] })?.amount || "";
-      return modalShell(prospect ? prospect.name : "Proyectos", "Cobrar seña", "Sin seña cobrada no hay proyecto. Se registra el cobro, el proyecto arranca en Preparación (1 de 5) y el prospecto pasa a Seña cobrada.", [
-        row(field("name", "Proyecto", "text", prospect ? prospect.name : ""), field("client", "Cliente", "text", prospect?.name || "")),
-        field("service", "Servicio", "text", "", 'required placeholder="Agente de atención, web, automatización…"'),
-        row(field("total", "Total acordado USD", "number", total, 'required min="1" step="1"'), field("deposit", "Seña cobrada USD", "number", total ? Math.round(total / 2) : "", 'required min="1" step="1"')),
-        row(field("date", "Fecha de cobro", "date", today), field("deliveryEstimate", "Entrega estimada", "date", addDays(today, 21))),
-        row(field("maintenance", "Mantenimiento USD/mes", "number", "0", 'min="0" step="1"'), prospect ? "" : units()),
-        area("notes", "Alcance acordado", "", 'placeholder="Qué se vendió y el extra que no pidió"'),
-      ].join(""), "Registrar seña y crear proyecto");
-    }
-    case "new-payment": {
-      const project = modal.id ? find("projects", modal.id) : null;
-      const balance = project ? projectBalance(project, state.data.payments) : "";
-      const list = state.data.projects.filter((item) => item.stage !== "closed" || item.id === project?.id).map((item) => [item.id, item.name]);
-      return modalShell(project ? project.name : "Cobros", "Registrar cobro", project ? `Saldo pendiente: ${usd(balance)}.` : "Solo lo que entró. Propuestas y promesas no son cobro.", [
-        row(field("date", "Fecha", "date", today), field("amount", "Monto USD", "number", balance || "", 'required min="1" step="1"')),
-        row(select("concept", "Concepto", PAYMENT_CONCEPTS, project?.deliveredAt ? "Saldo" : "Otro"), units(project?.unit)),
-        select("projectId", "Proyecto", list, project?.id || "", "Sin proyecto"),
-        field("note", "Nota", "text", "", 'placeholder="Medio de pago, moneda original…"'),
-      ].join(""), "Registrar cobro");
-    }
-    case "new-subscription":
-      return modalShell("Cobros", "Nuevo abono", "Suma al MRR mientras esté activo.", [
-        field("client", "Cliente · servicio"), row(field("amount", "USD por mes", "number", "", 'required min="1" step="1"'), units()), field("since", "Desde", "date", today),
-      ].join(""), "Crear abono");
     case "project-advance": {
       const project = find("projects", modal.id);
       const next = nextStage(project.stage);
@@ -855,24 +845,6 @@ function modalMarkup() {
       return modalShell(project.name, "Pausar proyecto", "El cliente ve el motivo y qué hace falta para seguir.", [
         area("reason", "Motivo", "", "required"), field("next", "Qué hace falta para seguir"), field("review", "Revisar el", "date", addDays(today, 7)),
       ].join(""), "Pausar");
-    }
-    case "project-milestone": {
-      const project = find("projects", modal.id);
-      return modalShell(project.name, "Próximo hito", "Es una estimación, no un compromiso. El cliente la ve en su portal.", [
-        field("title", "Hito", "text", project.milestone?.title || ""),
-        row(select("owner", "Responsable", ["Eclipse", "Cliente", "Eclipse y cliente"], project.milestone?.owner || "Eclipse"), field("due", "Fecha estimada", "date", project.milestone?.due || addDays(today, 7))),
-        field("deliveryEstimate", "Entrega estimada del proyecto", "date", project.deliveryEstimate || "", ""),
-      ].join(""), "Guardar hito");
-    }
-    case "client-action": {
-      const project = find("projects", modal.id);
-      return modalShell(project.name, "Pedir acción al cliente", "Aparece en su portal como «Requiere tu acción». Si no responde en 2 días, te lo recuerda Hoy.", field("title", "Qué tiene que hacer", "text", "", 'required placeholder="Aprobar, confirmar o enviar…"'), "Pedir acción");
-    }
-    case "project-update": {
-      const project = find("projects", modal.id);
-      return modalShell(project.name, "Publicar actualización", "Cada avance con fecha: es lo que el cliente lee en su portal.", [
-        field("date", "Fecha", "date", today), field("title", "Título"), area("body", "Detalle", "", ""),
-      ].join(""), "Publicar");
     }
     case "project-referral": {
       const project = find("projects", modal.id);
@@ -939,34 +911,38 @@ const SUBMITS = {
     return `${EVENT_MODALS[state.modal.kind][0]}: registrado.`;
   },
   "new-prospect"(values) {
+    const id = newId("p");
     state.data.prospects.push({
-      id: newId("p"), name: values.name, contact: values.contact, unit: values.unit, source: values.source, batchId: values.batchId || null,
+      id, name: values.name, contact: values.contact, unit: values.unit, source: values.source, batchId: values.batchId || null,
       need: values.need, offer: values.offer, stage: "contactado", createdAt: values.createdAt,
       events: [{ id: newId("e"), type: "alta", date: values.createdAt, note: "" }],
     });
+    window.location.hash = `#prospectos/${encodeURIComponent(id)}`;
     return "Prospecto creado.";
   },
   "new-batch"(values) {
-    state.data.batches.push({ id: newId("lote"), name: values.name, vertical: values.vertical, unit: values.unit, demo: values.demo, sentAt: values.sentAt, signal: null, report: null });
+    const id = newId("lote");
+    state.data.batches.push({ id, name: values.name, vertical: values.vertical, unit: values.unit, demo: values.demo, hypothesis: values.hypothesis || "", target: Number(values.target) || 0, sentAt: values.sentAt, time: values.time, signalDays: Number(values.signalDays) || 2, closeDays: Number(values.closeDays) || 7, signal: null, report: null });
+    window.location.hash = `#lotes/${encodeURIComponent(id)}`;
     return "Lote creado. Sumale los contactos.";
   },
   "batch-signal"(values) {
-    find("batches", state.modal.id).signal = { date: todayISO(), note: values.note };
+    find("batches", state.modal.id).signal = { date: values.date, note: values.note };
     return "Señal registrada.";
   },
   "batch-close"(values) {
-    find("batches", state.modal.id).report = { date: todayISO(), worked: values.worked, notWorked: values.notWorked, change: values.change };
+    find("batches", state.modal.id).report = { date: values.date, worked: values.worked, notWorked: values.notWorked, change: values.change };
     return "Lote cerrado con informe.";
   },
   "new-project"(values) {
     const prospect = state.modal.id ? find("prospects", state.modal.id) : null;
-    const unit = prospect?.unit || values.unit;
+    const unit = values.unit || prospect?.unit;
     const id = newId("pr");
     state.data.projects.push({
       id, code: nextCode(), prospectId: prospect?.id || null, name: values.name, client: values.client, unit, service: values.service,
       stage: "preparation", total: Number(values.total), maintenance: Number(values.maintenance) || 0, startedAt: values.date,
       history: [{ stage: "preparation", start: values.date }],
-      milestone: { title: "Insumos y plan de trabajo listos", owner: "Eclipse y cliente", due: addDays(values.date, 5) },
+      milestone: { title: values.milestone || "Insumos y plan de trabajo listos", owner: "Eclipse y cliente", due: values.milestoneDue || addDays(values.date, 5) },
       clientAction: null, deliveryEstimate: values.deliveryEstimate, deliveredAt: null, paidAt: null, referral: null, notes: values.notes,
       updates: [{ id: newId("u"), date: values.date, title: "Proyecto confirmado", body: "Seña registrada. Arrancamos con la preparación.", stageChange: { from: null, to: "preparation" } }],
     });
@@ -1013,18 +989,21 @@ const SUBMITS = {
   "project-pause"(values) {
     const project = find("projects", state.modal.id);
     project.pausedIn = project.stage;
-    project.pause = { since: todayISO(), reason: values.reason, next: values.next, review: values.review };
-    moveStage(project, "paused", todayISO(), "Proyecto en pausa", values.reason);
+    project.pause = { since: values.date, reason: values.reason, next: values.next, review: values.review };
+    moveStage(project, "paused", values.date, "Proyecto en pausa", values.reason);
     return "Proyecto en pausa.";
   },
   "project-milestone"(values) {
     const project = find("projects", state.modal.id);
-    project.milestone = { title: values.title, owner: values.owner, due: values.due };
+    project.milestone = { title: values.title, owner: values.owner, due: values.due, time: values.time || "" };
+    (project.updates ||= []).push({ id: newId("u"), date: values.recordDate, title: `Hito definido: ${values.title}`, body: values.body || `Estimado para ${fmtDate(values.due, true)}${values.time ? ` · ${values.time}` : ""}. Responsable: ${values.owner}.` });
     if (values.deliveryEstimate) project.deliveryEstimate = values.deliveryEstimate;
     return "Hito guardado.";
   },
   "client-action"(values) {
-    find("projects", state.modal.id).clientAction = { title: values.title, requestedOn: todayISO() };
+    const project = find("projects", state.modal.id);
+    project.clientAction = { title: values.title, requestedOn: values.date, time: values.time };
+    (project.updates ||= []).push({ id: newId("u"), date: values.date, title: `Acción pedida: ${values.title}`, body: "Requiere una respuesta del cliente." });
     return "Acción pedida al cliente.";
   },
   "project-update"(values) {
@@ -1033,9 +1012,29 @@ const SUBMITS = {
   },
   "project-referral"(values) {
     const project = find("projects", state.modal.id);
-    project.referral = { date: todayISO(), note: values.note };
-    finishProject(project, todayISO());
+    project.referral = { date: values.date, note: values.note };
+    finishProject(project, values.date);
     return project.stage === "support" ? "Referido pedido. El proyecto pasa a Soporte." : "Referido pedido. Proyecto cerrado.";
+  },
+  "new-goal"(values) {
+    const existing = state.modal.id ? find("goals", state.modal.id) : null;
+    const now = new Date().toISOString();
+    const titles = values.steps.split("\n").map((line) => line.trim()).filter(Boolean);
+    const steps = titles.map((title) => existing?.steps.find((step) => step.title === title) || { id: newId("step"), title, done: false, completedAt: null });
+    const goal = { ...(existing || {}), id: existing?.id || newId("goal"), title: values.title.trim(), category: values.category, priority: values.priority, due: values.due, time: values.time, notes: values.notes, reference: values.reference, steps, createdAt: existing?.createdAt || now, updatedAt: now, completedAt: steps.length ? steps.every((step) => step.done) ? existing?.completedAt || now : null : existing?.completedAt || null };
+    if (existing) Object.assign(existing, goal); else state.data.goals.push(goal);
+    window.location.hash = `#metas/${encodeURIComponent(goal.id)}`;
+    return existing ? "Meta actualizada." : "Meta creada. Un paso a la vez.";
+  },
+  "new-event"(values) {
+    const existing = state.modal.id ? find("calendarEvents", state.modal.id) : null;
+    const now = new Date().toISOString();
+    const event = { ...(existing || {}), id: existing?.id || newId("event"), title: values.title.trim(), type: values.type, date: values.date, time: values.time, duration: Number(values.duration), notes: values.notes, reference: values.reference, completedAt: existing?.completedAt || null, createdAt: existing?.createdAt || now, updatedAt: now };
+    if (existing) Object.assign(existing, event); else state.data.calendarEvents.push(event);
+    Object.assign(state.calendar, { date: event.date, month: event.date.slice(0, 7), eventId: event.id });
+    state.pages.calendar = 1;
+    window.location.hash = `#calendario/${encodeURIComponent(event.id)}`;
+    return existing ? "Evento actualizado." : "Evento agendado.";
   },
 };
 
@@ -1051,6 +1050,85 @@ function resumeProject(project) {
   project.pause = null;
   project.pausedIn = null;
   return `Proyecto retomado en ${STAGES[to].name}.`;
+}
+
+const AUDIT_LABELS = {
+  "new-goal": "Meta guardada", "goal-step": "Paso de una meta actualizado", "goal-toggle": "Estado de meta actualizado", "goal-delete": "Meta eliminada",
+  "new-event": "Evento guardado", "event-toggle": "Estado de evento actualizado", "event-delete": "Evento eliminado",
+  "new-prospect": "Prospecto creado", "prospect-event": "Actividad de prospecto registrada", "delete-prospect": "Prospecto eliminado",
+  "new-batch": "Lote creado", "batch-signal": "Señal de lote registrada", "batch-close": "Lote cerrado",
+  "new-project": "Proyecto creado y seña cobrada", "new-payment": "Cobro registrado", "delete-payment": "Cobro eliminado", "new-subscription": "Abono creado", "toggle-subscription": "Estado de abono actualizado",
+  "project-advance": "Etapa de proyecto actualizada", "project-pause": "Proyecto pausado", "project-resume": "Proyecto retomado", "project-delivered": "Entrega registrada", "project-referral": "Referido registrado",
+  "project-milestone": "Hito definido", "project-update": "Actualización registrada", "client-action": "Acción pedida al cliente", "client-action-done": "Acción del cliente resuelta",
+};
+
+function recordMutation(type, values, before, entityId) {
+  const planning = ["new-goal", "new-event", "project-milestone", "new-subscription"].includes(type);
+  const stamp = auditStamp(planning ? values.recordDate || todayISO() : values.date || values.createdAt || values.sentAt || todayISO(), planning ? values.recordTime || localTime() : values.time || localTime());
+  const addStamp = (entry) => Object.assign(entry, auditStamp(entry.date || stamp.date, stamp.time));
+  for (const table of ["prospects", "projects"]) {
+    for (const entity of state.data[table]) {
+      const old = before[table].find((item) => item.id === entity.id);
+      const key = table === "prospects" ? "events" : "updates";
+      for (const entry of entity[key] || []) if (!(old?.[key] || []).some((item) => item.id === entry.id)) addStamp(entry);
+      if (!old) Object.assign(entity, { createdAtInstant: stamp.occurredAt, recordedAt: stamp.recordedAt, timezone: stamp.timezone });
+      if (table === "projects") {
+        for (const key of ["milestone", "clientAction", "pause", "referral"]) {
+          if (entity[key] && JSON.stringify(entity[key]) !== JSON.stringify(old?.[key])) {
+            Object.assign(entity[key], { recordedAt: stamp.recordedAt, createdAtInstant: stamp.occurredAt, timezone: stamp.timezone });
+            if (key === "referral") addStamp(entity[key]);
+            if (key === "clientAction") Object.assign(entity[key], { requestedAt: stamp.occurredAt, time: stamp.time });
+          }
+        }
+        for (let i = 0; i < (entity.history || []).length; i++) {
+          if (!old?.history?.[i]) entity.history[i].startAt = stamp.occurredAt;
+          if (entity.history[i].end && entity.history[i].end !== old?.history?.[i]?.end) entity.history[i].endAt = stamp.occurredAt;
+        }
+      }
+    }
+  }
+  for (const table of ["payments", "batches", "subscriptions", "goals", "calendarEvents"]) {
+    for (const entity of state.data[table]) {
+      const old = before[table].find((item) => item.id === entity.id);
+      if (!old && table === "payments") addStamp(entity);
+      if (!old) Object.assign(entity, { recordedAt: stamp.recordedAt, timezone: stamp.timezone });
+      if (table === "batches") for (const key of ["signal", "report"]) if (entity[key] && JSON.stringify(old?.[key]) !== JSON.stringify(entity[key])) addStamp(entity[key]);
+      if (table === "calendarEvents" && (!old || JSON.stringify(old) !== JSON.stringify(entity))) entity.startAt = auditStamp(entity.date, entity.time).occurredAt;
+    }
+  }
+  const tables = ["goals", "calendarEvents", "projects", "prospects", "batches", "subscriptions", "payments"];
+  const changed = tables.flatMap((table) => {
+    const current = state.data[table];
+    const oldList = before[table];
+    const entities = current.filter((item) => JSON.stringify(item) !== JSON.stringify(oldList.find((old) => old.id === item.id)));
+    return [...entities, ...oldList.filter((item) => !current.some((now) => now.id === item.id))];
+  });
+  const entity = changed.find((item) => item.id === entityId) || changed[0];
+  state.data.audit.push({ id: newId("audit"), action: type, title: type === "prospect-event" ? `${EVENT_LABELS[state.modal?.kind] || "Actividad"} registrada` : AUDIT_LABELS[type] || "Operación actualizada", entityId: entity?.id || null, entityName: entity?.name || entity?.title || entity?.client || entity?.concept || "Eclipse", ...stamp });
+}
+
+function validateValues(type, values) {
+  if (type === "new-project") {
+    if (Number(values.deposit) > Number(values.total)) return "La seña no puede superar el total acordado.";
+    if (values.milestoneDue < values.date) return "El primer hito debe ser igual o posterior al inicio.";
+    if (values.deliveryEstimate < values.milestoneDue) return "La entrega estimada debe ser igual o posterior al primer hito.";
+  }
+  if (type === "new-batch" && Number(values.closeDays) <= Number(values.signalDays)) return "El cierre del lote tiene que ocurrir después de leer la señal.";
+  if (type === "new-goal") {
+    const steps = values.steps.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (new Set(steps).size !== steps.length) return "Cada paso debe tener un nombre distinto.";
+    if (steps.length > 50) return "Usá hasta 50 pasos para esta meta.";
+  }
+  if (type === "new-payment" && values.projectId) {
+    const project = find("projects", values.projectId);
+    if (project && values.unit !== project.unit) return "El cobro debe usar la misma unidad que el proyecto.";
+    if (project && ["Seña", "Saldo"].includes(values.concept) && Number(values.amount) > projectBalance(project, state.data.payments)) return "El cobro supera el saldo pendiente del proyecto.";
+  }
+  if (type === "new-event") {
+    const [hour, minute] = values.time.split(":").map(Number);
+    if (hour * 60 + minute + Number(values.duration) > 1440) return "La actividad debe terminar dentro del día elegido. Dividila en dos eventos si pasa la medianoche.";
+  }
+  return "";
 }
 
 function exportData() {
@@ -1073,16 +1151,82 @@ async function importData(input) {
   }
 }
 
-const MODALS = new Set(["prospect-event", "new-prospect", "new-batch", "batch-signal", "batch-close", "new-project", "new-payment", "new-subscription",
-  "project-advance", "project-delivered", "project-pause", "project-milestone", "client-action", "project-update", "project-referral"]);
+const MODALS = new Set(["prospect-event", "batch-signal", "batch-close", "project-advance", "project-delivered", "project-pause", "project-referral"]);
 
 function handleAction(button) {
   const { action, id, kind } = button.dataset;
+  if (state.wizard) captureWizard();
+  if (GENERATORS.has(action)) {
+    startGenerator({ type: action, id, kind, template: button.dataset.template, day: button.dataset.day || (routeInfo().view === "calendario" ? state.calendar.date : todayISO()) });
+    return;
+  }
   if (MODALS.has(action)) {
     showModal({ type: action, id, kind });
     return;
   }
+  const before = AUDIT_LABELS[action] ? structuredClone(state.data) : null;
+  const finish = (message) => { recordMutation(action, {}, before, id); commit(message); };
   switch (action) {
+    case "theme-toggle": {
+      const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = theme;
+      document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#05050a" : "#f4efe6";
+      try { localStorage.setItem("eclipse-theme", theme); } catch { /* El tema funciona también sin storage. */ }
+      render();
+      break;
+    }
+    case "page": state.pages[id] = Number(kind); render(); break;
+    case "goal-filter": state.goalFilter = id; state.pages.goals = 1; render(); break;
+    case "goal-toggle": {
+      const goal = find("goals", id);
+      if (!goal || goal.steps.length) break;
+      goal.completedAt = goal.completedAt ? null : new Date().toISOString();
+      goal.updatedAt = new Date().toISOString();
+      finish(goal.completedAt ? "Meta completada." : "Meta reabierta.");
+      break;
+    }
+    case "goal-delete":
+      if (window.confirm("¿Eliminar esta meta y sus pasos?")) {
+        state.data.goals = state.data.goals.filter((goal) => goal.id !== id);
+        window.location.hash = "#metas";
+        finish("Meta eliminada.");
+      }
+      break;
+    case "event-toggle": {
+      const event = find("calendarEvents", id);
+      if (!event) break;
+      event.completedAt = event.completedAt ? null : new Date().toISOString();
+      event.updatedAt = new Date().toISOString();
+      finish(event.completedAt ? "Actividad completada." : "Actividad reabierta.");
+      break;
+    }
+    case "event-delete":
+      if (window.confirm("¿Eliminar este evento del calendario?")) {
+        state.data.calendarEvents = state.data.calendarEvents.filter((event) => event.id !== id);
+        window.location.hash = "#calendario";
+        state.calendar.eventId = null;
+        finish("Evento eliminado.");
+      }
+      break;
+    case "calendar-day": state.calendar.date = id; state.calendar.eventId = null; state.pages.calendar = 1; render(); break;
+    case "calendar-filter": state.calendar.filter = id; state.pages.calendar = 1; render(); break;
+    case "calendar-month": {
+      const [year, month] = state.calendar.month.split("-").map(Number);
+      const next = new Date(Date.UTC(year, month - 1 + Number(id), 1)).toISOString().slice(0, 7);
+      Object.assign(state.calendar, { month: next, date: `${next}-01`, eventId: null });
+      state.pages.calendar = 1;
+      render();
+      break;
+    }
+    case "calendar-today": Object.assign(state.calendar, { date: todayISO(), month: todayISO().slice(0, 7), eventId: null }); state.pages.calendar = 1; render(); break;
+    case "wizard-prev": state.wizard.step = Math.max(0, state.wizard.step - 1); render(); focusGenerator(); break;
+    case "wizard-cancel": {
+      const returnTo = state.wizard?.returnTo || "#hoy";
+      state.wizard = null;
+      window.location.hash = returnTo;
+      render();
+      break;
+    }
     case "close-modal": closeModal(); break;
     case "open-data": showModal({ type: "data" }); break;
     case "export-data": exportData(); break;
@@ -1106,31 +1250,33 @@ function handleAction(button) {
       break;
     }
     case "tab": state.tab = id; render(); break;
-    case "project-resume": commit(resumeProject(find("projects", id))); break;
+    case "project-resume": finish(resumeProject(find("projects", id))); break;
     case "client-action-done": {
       const project = find("projects", id);
       (project.updates ||= []).push({ id: newId("u"), date: todayISO(), title: `Resuelto: ${project.clientAction.title}`, body: "" });
       project.clientAction = null;
-      commit("Acción del cliente resuelta.");
+      finish("Acción del cliente resuelta.");
       break;
     }
     case "toggle-subscription": {
       const sub = find("subscriptions", id);
       sub.active = !sub.active;
-      commit(sub.active ? "Abono reactivado." : "Abono dado de baja.");
+      finish(sub.active ? "Abono reactivado." : "Abono dado de baja.");
       break;
     }
     case "delete-payment":
       if (window.confirm("¿Eliminar este cobro?")) {
         state.data.payments = state.data.payments.filter((payment) => payment.id !== id);
-        commit("Cobro eliminado.");
+        const project = find("projects", before.payments.find((payment) => payment.id === id)?.projectId);
+        if (project && projectBalance(project, state.data.payments) > 0) project.paidAt = null;
+        finish("Cobro eliminado.");
       }
       break;
     case "delete-prospect":
       if (window.confirm("¿Eliminar este prospecto y su historial?")) {
         state.data.prospects = state.data.prospects.filter((prospect) => prospect.id !== id);
         window.location.hash = "#prospectos";
-        commit("Prospecto eliminado.");
+        finish("Prospecto eliminado.");
       }
       break;
     default: break;
@@ -1140,8 +1286,49 @@ function handleAction(button) {
 // ---------- Render ----------
 
 const root = document.getElementById("app");
+const uiHelpers = { state, esc, icon, phaseGlyph, shell, crumbs, btn, field, area, select, row, usd, fmtDate, meter, emptyState, pagination, pageSlice, dateTime };
+const workspace = workspaceUI(uiHelpers);
+
+function startGenerator(meta) {
+  const previous = state.wizard?.returnTo || window.location.hash || "#hoy";
+  state.modal = null;
+  state.wizard = { ...meta, step: 0, values: {}, returnTo: previous.startsWith("#crear") ? "#hoy" : previous };
+  state.wizard.values = generatorConfig(state.wizard, state.data, uiHelpers)?.values || {};
+  if (meta.type === "new-goal" && meta.template === "ventas") {
+    const v = state.calculator;
+    const plan = salesPlan({ gap: Number(v.gap), ticket: Number(v.ticket), conversion: Number(v.conversion) });
+    if (plan) Object.assign(state.wizard.values, { title: `Definir mi plan para ${plan.proposals} propuestas`, notes: `Escenario: cubrir ${usd(Number(v.gap))} con ${plan.sales} ventas y ${plan.proposals} propuestas. Ticket ${usd(Number(v.ticket))}; conversión estimada ${v.conversion}%.` });
+  }
+  window.location.hash = `#crear/${meta.type}`;
+  render();
+  focusGenerator();
+}
+
+function captureWizard() {
+  const form = root.querySelector('[data-form="wizard"]');
+  if (form && state.wizard) Object.assign(state.wizard.values, Object.fromEntries(new FormData(form).entries()));
+}
+
+function focusGenerator() {
+  window.scrollTo({ top: 0, behavior: "instant" });
+  const title = root.querySelector(".generator-section-head h2");
+  if (title) { title.tabIndex = -1; title.focus({ preventScroll: true }); }
+}
 
 function screenFor({ view, id }) {
+  if (view === "crear") {
+    if (!GENERATORS.has(id)) return renderHoy();
+    if (!state.wizard || state.wizard.type !== id) {
+      state.wizard = { type: id, values: {}, step: 0, returnTo: "#hoy", day: todayISO() };
+      state.wizard.values = generatorConfig(state.wizard, state.data, uiHelpers)?.values || {};
+    }
+    if (["project-milestone", "project-update", "client-action"].includes(id) && !find("projects", state.wizard.id)) return shell(emptyState("Elegí un proyecto para continuar", "Abrí el proyecto y creá el registro desde su ficha.", '<a class="pt-link" href="#proyectos">Volver a proyectos</a>'), "proyectos");
+    return renderGenerator(state.wizard, state.data, uiHelpers);
+  }
+  if (view === "metas") return workspace.renderGoals(id);
+  if (view === "calendario") return workspace.renderCalendar(id);
+  if (view === "herramientas") return workspace.renderTools();
+  if (view === "actividad") return workspace.renderAudit();
   if (view === "prospectos") return id ? renderProspectDetail(id) : renderProspectos();
   if (view === "lotes") return renderLotes(id);
   if (view === "proyectos") return renderProyectos(id);
@@ -1202,7 +1389,37 @@ function onFilter(event) {
   render();
 }
 root.addEventListener("input", onFilter);
+root.addEventListener("input", (event) => {
+  if (event.target.matches("input, textarea") && event.target.validity.customError) event.target.setCustomValidity("");
+  const input = event.target.closest("[data-calc]");
+  if (!input) return;
+  state.calculator[input.dataset.calc] = input.value;
+  render();
+});
 root.addEventListener("change", (event) => {
+  if (event.target.matches('[name="inspiration"]') && state.wizard?.type === "new-goal") {
+    captureWizard();
+    const inspiration = agenda(state.data).find((item) => `${item.entity}:${item.id}:${item.kind}` === event.target.value);
+    if (inspiration) Object.assign(state.wizard.values, { title: inspiration.title, category: inspiration.entity === "project" ? "Proyecto" : "Ventas", reference: `${inspiration.entity}:${inspiration.id}`, notes: `Para ${inspiration.name}. Vencimiento operativo: ${fmtDate(inspiration.due, true)}.` });
+    render();
+    return;
+  }
+  if (event.target.matches("[data-goal][data-step]")) {
+    const goal = find("goals", event.target.dataset.goal);
+    if (!goal) return;
+    const before = structuredClone(state.data);
+    if (toggleGoalStep(goal, event.target.dataset.step)) {
+      recordMutation("goal-step", {}, before, goal.id);
+      commit(goal.completedAt ? "Todos los pasos listos. Meta completada." : "Paso actualizado.");
+    }
+    return;
+  }
+  if (event.target.matches("[data-calendar-date]") && event.target.value) {
+    Object.assign(state.calendar, { date: event.target.value, month: event.target.value.slice(0, 7), eventId: null });
+    state.pages.calendar = 1;
+    render();
+    return;
+  }
   if (event.target.matches('[data-action-change="import-data"]')) { importData(event.target); return; }
   if (event.target.matches("select[data-filter]")) onFilter(event);
 });
@@ -1210,14 +1427,57 @@ root.addEventListener("change", (event) => {
 root.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.target.closest("[data-form]");
-  if (!form || !form.reportValidity()) return;
+  if (!form) return;
+  for (const input of form.querySelectorAll("input, textarea")) {
+    input.setCustomValidity(input.required && !input.value.trim() ? "Completá este campo." : "");
+  }
+  if (!form.reportValidity()) return;
+  if (form.dataset.form === "wizard") {
+    captureWizard();
+    const wizard = state.wizard;
+    const config = generatorConfig(wizard, state.data, uiHelpers);
+    if (wizard.step < config.steps.length - 1) {
+      wizard.step++;
+      render();
+      focusGenerator();
+      return;
+    }
+    const values = Object.fromEntries(Object.entries(wizard.values).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]));
+    for (let i = 0; i < config.steps.length - 1; i++) {
+      const checkForm = document.createElement("form");
+      checkForm.innerHTML = config.steps[i][2];
+      if (!checkForm.checkValidity()) {
+        wizard.step = i;
+        render();
+        root.querySelector('[data-form="wizard"]')?.reportValidity();
+        return;
+      }
+    }
+    const error = validateValues(wizard.type, values);
+    if (error) { document.getElementById("wizard-error").textContent = error; return; }
+    const before = structuredClone(state.data);
+    state.modal = { type: wizard.type, id: wizard.id, kind: wizard.kind };
+    const message = SUBMITS[wizard.type](values);
+    recordMutation(wizard.type, values, before, wizard.id);
+    state.wizard = null;
+    if (window.location.hash.startsWith("#crear")) window.location.hash = wizard.returnTo;
+    commit(message);
+    return;
+  }
   const handler = SUBMITS[form.dataset.form];
   if (!handler) return;
-  const values = Object.fromEntries(new FormData(form).entries());
-  commit(handler(values));
+  const values = Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]));
+  const error = validateValues(form.dataset.form, values);
+  if (error) { toast(error, "warning"); return; }
+  const before = structuredClone(state.data);
+  const message = handler(values);
+  recordMutation(form.dataset.form, values, before, state.modal.id);
+  commit(message);
 });
 
 window.addEventListener("hashchange", () => {
+  captureWizard();
+  if (routeInfo().view !== "crear") state.wizard = null;
   state.modal = null;
   state.tab = "updates";
   render();
@@ -1227,7 +1487,15 @@ window.addEventListener("hashchange", () => {
 
 // Si otra pestaña guarda cambios, se recargan para no pisarlos.
 window.addEventListener("storage", (event) => {
+  if (event.key === "eclipse-theme") {
+    captureWizard();
+    document.documentElement.dataset.theme = event.newValue === "light" ? "light" : "dark";
+    document.querySelector('meta[name="theme-color"]').content = event.newValue === "light" ? "#f4efe6" : "#05050a";
+    render();
+    return;
+  }
   if (event.key && event.key.startsWith("eclipse-ops")) {
+    captureWizard();
     state.data = load();
     render();
   }

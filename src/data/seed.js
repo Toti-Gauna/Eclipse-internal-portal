@@ -190,9 +190,26 @@ export function buildSeed(today = todayISO()) {
     { id: "s1", client: "Consultorio · mantenimiento web", unit: "Agency", amount: 90, since: d(-40), active: true, projectId: null },
   ];
 
-  return { version: 2, example: true, settings: SETTINGS, prospects, batches, projects, payments, subscriptions };
+  const createdAt = new Date(`${today}T08:00:00`).toISOString();
+  const goals = [
+    { id: "goal-sales", title: "Dejar listas las propuestas de hoy", category: "Ventas", priority: "normal", due: today, time: "10:00", notes: "Un bloque corto para mover las conversaciones que ya están abiertas.", reference: "prospect:p-constructora", createdAt, updatedAt: createdAt, completedAt: null, steps: [
+      { id: "step-sales-1", title: "Elegir los tres prospectos prioritarios", done: true, completedAt: createdAt },
+      { id: "step-sales-2", title: "Personalizar la propuesta de cada negocio", done: false, completedAt: null },
+      { id: "step-sales-3", title: "Enviar y agendar los seguimientos", done: false, completedAt: null },
+    ] },
+    { id: "goal-build", title: "Probar el flujo de reprogramación", category: "Proyecto", priority: "alta", due: today, time: "14:00", notes: "Cerrar la prueba completa antes de registrar el avance del proyecto.", reference: "project:pr-turnos", createdAt, updatedAt: createdAt, completedAt: null, steps: [
+      { id: "step-build-1", title: "Probar una reserva y su recordatorio", done: false, completedAt: null },
+      { id: "step-build-2", title: "Reprogramar desde el chat", done: false, completedAt: null },
+      { id: "step-build-3", title: "Registrar el resultado en el proyecto", done: false, completedAt: null },
+    ] },
+  ];
+  const calendarEvents = [
+    { id: "calendar-call", title: "Llamada de propuesta · Constructora", type: "Llamada", date: today, time: "15:00", duration: 30, notes: "Revisar el alcance web + CRM y acordar el próximo paso.", reference: "prospect:p-constructora", createdAt, updatedAt: createdAt, completedAt: null },
+    { id: "calendar-focus", title: "Bloque de foco · nuevas oportunidades", type: "Bloque de foco", date: d(1), time: "09:00", duration: 60, notes: "Personalizar demos y enviar el próximo lote.", reference: "", createdAt, updatedAt: createdAt, completedAt: null },
+  ];
+  return { version: 3, example: true, settings: SETTINGS, prospects, batches, projects, payments, subscriptions, goals, calendarEvents, audit: [] };
 }
 
 export function emptyData() {
-  return { version: 2, example: false, settings: SETTINGS, prospects: [], batches: [], projects: [], payments: [], subscriptions: [] };
+  return { version: 3, example: false, settings: SETTINGS, prospects: [], batches: [], projects: [], payments: [], subscriptions: [], goals: [], calendarEvents: [], audit: [] };
 }
