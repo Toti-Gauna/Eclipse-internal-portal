@@ -1,6 +1,6 @@
 # Backend, hosting y credenciales de Eclipse
 
-Decisión actual: **WhatsApp manual**, sin email ni SMTP. El sitio de esta PR sigue siendo estático y con localStorage. El [prompt del backend](backend-prompt.md) define la implementación futura; los ejemplos de entorno todavía no se consumen por el código actual.
+Decisión actual: **backend en Render por ahora, DB PostgreSQL en Neon, frontends en Hostinger y WhatsApp manual**, sin email ni SMTP. El sitio de esta PR sigue siendo estático y con localStorage. El [prompt del backend](backend-prompt.md) define la implementación futura; los ejemplos de entorno todavía no se consumen por el código actual. Seguí el [paso a paso de Neon y Render](neon-render-setup.md) para preparar proyecto, conexiones, migraciones y recuperación.
 
 ## Qué permite Hostinger
 
@@ -15,9 +15,9 @@ Fuente: [opciones de Node.js en Hostinger](https://www.hostinger.com/support/nod
 | Portal interno | Hostinger estático; Pages para revisión con ejemplos | UI, login y URL pública de API |
 | Portal del cliente / sitio público | Hostinger, export estático de Eclipse-Web | UI pública, login y datos obtenidos tras autenticación |
 | Backend Node.js | Render Web Service | Sesiones, autorización, reglas y API |
-| Base de datos | PostgreSQL persistente compatible | Usuarios con hashes, proyectos, cobros, metas y auditoría |
+| Base de datos | Neon PostgreSQL, proyecto Eclipse separado de Handy | Usuarios con hashes, proyectos, cobros, metas y auditoría |
 
-Para probar puede usarse Render gratuito, contemplando su arranque tras inactividad. Para producción se recomienda un servicio sin suspensión y una base persistente con backups. Render gratuito pierde archivos locales al reiniciar/redeployar y su PostgreSQL gratuito **expira a los 30 días**. No almacenar la operación real en SQLite local o en esa base temporal. [Límites oficiales de Render gratuito](https://render.com/docs/free).
+Para probar puede usarse Render gratuito, contemplando su arranque tras inactividad. La DB elegida es **Neon**, por lo que no se crea Render Postgres. Render gratuito pierde archivos locales al reiniciar/redeployar; Neon persiste los datos fuera del servicio. Revisá las cuotas y recuperación del plan Neon y probá un backup antes de producción. [Límites oficiales de Render gratuito](https://render.com/docs/free), [backups Neon](https://neon.com/docs/manage/backups).
 
 Usar subdominios del mismo dominio registrable, por ejemplo `interno.tudominio.com`, `www.tudominio.com` y `api.tudominio.com` (el último apunta a Render), simplifica el manejo de cookies. Pages en `github.io` se reserva para la demostración visual; autenticarlo contra `onrender.com` puede depender de cookies de terceros y fallar en algunos navegadores.
 
@@ -43,7 +43,7 @@ Los ejemplos dummy son `admin@example.invalid / Dummy_Admin_Cambiar_2026!` y `cl
 
 ## Despliegue después de implementar
 
-1. Crear la DB persistente, configurar conexión TLS y backups.
+1. Crear el proyecto Eclipse en Neon, base `eclipse`, staging y conexiones pooled/directas con TLS. Revisar retención y backups.
 2. Conectar el repo privado del backend al proveedor. Configurar variables privadas, build, start y PORT según su documentación; ejecutar migraciones y bootstrap administrativo.
 3. Configurar dominio `api.tudominio.com`, HTTPS y los dos orígenes permitidos. Probar health y login.
 4. Configurar las URLs públicas de los frontends, construir/exportar y subir solo los artefactos estáticos a Hostinger. No subir `.env`, fixtures reales ni secretos a `public_html`.

@@ -62,4 +62,4 @@ GitHub Actions ejecuta las verificaciones en las PRs. Pages incluye los tres est
 
 Está listo el [prompt para conectar ambos portales con backend y DB](docs/backend-prompt.md), con [opciones de hosting y credenciales](docs/hosting.md) y [ejemplos dummy de entorno](docs/env/). Son documentación para la implementación futura; esta versión sigue guardando datos en el navegador. Los frontends no deben contener contraseñas ni secretos. El canal de comunicación acordado es **WhatsApp manual**, sin emails.
 
-El plan actual de Hostinger no permite Node.js: la opción inmediata es mantener los frontends allí y usar Render para la API con una DB persistente. Si se mejora a Business/Cloud, se puede alojar Node.js en Hostinger. La privacidad del repo no sustituye autenticación y permisos de la API.
+La decisión confirmada es mantener los frontends en Hostinger, usar **Render para la API** por ahora y **Neon PostgreSQL para la DB**, en un proyecto separado de Handy. Está incluido el [paso a paso de Neon y Render](docs/neon-render-setup.md). La privacidad del repo no sustituye autenticación y permisos de la API.
