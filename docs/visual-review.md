@@ -4,7 +4,7 @@ Capturas del portal con datos de ejemplo, hechas en Chromium. Tipografías local
 
 ## Hoy · modo oscuro
 
-Plan del día, metas, calendario y agenda de cinco ítems por página.
+Plan del día, metas, calendario y agenda de cinco ítems por página. La agenda conserva separadores suaves y etiquetas de vencimiento, sin el borde superior ni las líneas laterales de color.
 
 ![Hoy en modo oscuro](preview/hoy-oscuro.png)
 

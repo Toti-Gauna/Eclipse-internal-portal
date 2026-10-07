@@ -224,8 +224,8 @@ function agendaButton(item) {
 
 function agendaRows(items) {
   const cols = "minmax(0,1.5fr) minmax(0,1.1fr) minmax(0,.7fr) minmax(0,1fr)";
-  return `<div class="pt-rows-head" style="--cols:${cols}"><span class="label">Qué hay que hacer</span><span class="label">Dónde</span><span class="label">Vence</span><span class="label" style="text-align:right">Acción</span></div>
-  <ul class="pt-rows">${items.map((item) => {
+  return `<div class="pt-rows-head agenda-rows-head" style="--cols:${cols}"><span class="label">Qué hay que hacer</span><span class="label">Dónde</span><span class="label">Vence</span><span class="label" style="text-align:right">Acción</span></div>
+  <ul class="pt-rows agenda-rows">${items.map((item) => {
     const [route, type] = ENTITY[item.entity];
     return `<li class="pt-row" style="--cols:${cols}"${item.delta < 0 ? " data-late" : item.delta === 0 ? " data-turn" : ""}>
       <div><span class="pt-row-name">${esc(item.title)}</span></div>

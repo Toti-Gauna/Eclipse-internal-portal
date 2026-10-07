@@ -57,3 +57,9 @@ npm run test:browser
 Las pruebas de navegador levantan su propio servidor local. Se puede usar un Chromium instalado con `CHROMIUM_PATH=/ruta/a/chromium`. Cubren metas y reapertura, persistencia, paginación, generadores, validaciones, calendario, auditoría, exportación/importación y desbordes en 375 / 768 / 1024 / 1440 px. Las capturas quedan en `test-results/`.
 
 GitHub Actions ejecuta las verificaciones en las PRs. Pages incluye los tres estilos y el arranque de la carga, y versiona estilos y módulos para evitar caché obsoleta. [Revisión visual](docs/visual-review.md).
+
+## Próximo backend y despliegue
+
+Está listo el [prompt para conectar ambos portales con backend y DB](docs/backend-prompt.md), con [opciones de hosting y credenciales](docs/hosting.md) y [ejemplos dummy de entorno](docs/env/). Son documentación para la implementación futura; esta versión sigue guardando datos en el navegador. Los frontends no deben contener contraseñas ni secretos. El canal de comunicación acordado es **WhatsApp manual**, sin emails.
+
+El plan actual de Hostinger no permite Node.js: la opción inmediata es mantener los frontends allí y usar Render para la API con una DB persistente. Si se mejora a Business/Cloud, se puede alojar Node.js en Hostinger. La privacidad del repo no sustituye autenticación y permisos de la API.
