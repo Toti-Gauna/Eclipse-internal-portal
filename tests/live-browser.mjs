@@ -350,7 +350,9 @@ try {
   await goto(limited, "#cobros");
   await limited.locator(".live-forbidden").waitFor();
   await goto(limited, "#solicitudes");
-  await limited.locator(".pt-row-name").first().click();
+  // La solicitud de esta corrida ya se aceptó arriba: se mira la lista de aceptadas (no depende de datos de otras corridas).
+  await limited.click('[data-action="filter"][data-id="solicitudes.status"][data-kind="accepted"]');
+  await limited.locator(".pt-row-name", { hasText: String(stamp) }).first().click();
   await limited.waitForSelector(".pt-current");
   assert.equal(await limited.getByRole("button", { name: "Rechazar" }).count(), 0, "sin requests:review no hay botones de revisión");
   assert.equal(writes.length, 0, "sin permiso no se envía ninguna escritura");
