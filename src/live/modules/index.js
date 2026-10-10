@@ -5,6 +5,8 @@ import hoy from "./hoy.js";
 import solicitudes from "./solicitudes.js";
 import proyectos from "./proyectos.js";
 import cobros from "./cobros.js";
+import prospectos from "./prospectos.js";
+import lotes from "./lotes.js";
 import pending from "./pending.js";
 
-export const MODULES = [core, hoy, solicitudes, proyectos, cobros, ...pending];
+export const MODULES = [core, hoy, solicitudes, proyectos, cobros, prospectos, lotes, ...pending];

@@ -130,7 +130,9 @@ Permisos del administrador: la interfaz oculta o explica lo que la cuenta no pue
 | Proyectos | Hecho | Lista, ficha, alta con acuerdo + seña (idempotente), etapa, pausa/retomar/cierre, datos, hitos (crear, editar, completar con evidencia, mostrar/ocultar al cliente), actualizaciones y acciones del cliente (borrador → publicar con confirmación → retirar/resolver; notas internas), miembros, alcance y solicitudes de cambio, finanzas del servidor. |
 | Cobros | Hecho | Alta (cobrado, comprometido, propuesto, mantenimiento), transiciones, anulación, libro global por período y estado. |
 | Hoy | Parcial | Solo solicitudes por revisar y cobros comprometidos. |
-| Prospectos, Lotes, Calendario, Mi plan (metas), Herramientas, Bitácora | Pendiente (etapa 2) | Pantalla honesta «todavía no está conectada». |
+| Prospectos | Hecho | Lista con filtros del servidor (búsqueda, etapa, responsable, fuente, tibios, acción vencida, fechas, duplicados) y «Cargar más» por cursor; ficha con historial (orden a elección), camino a la seña, regla de la casa calculada (llamada el mismo día → propuesta ≤24 h → toques +2/+5/+9), actividades con hora real opcional, etapa (pausa con motivo y revisión, perdido, reactivar), consentimiento, edición, anulación con motivo, duplicados (búsqueda al crear con confirmación y «duplicado de»), lote, auditoría, exportación CSV (`leads:export`), alta desde solicitud de plan y conversión en proyecto (`leads:write` + `projects:write` + `billing:write`, con `Idempotency-Key`). Importes con `billing:read|write`. |
+| Lotes | Hecho | Lista, alta, edición (abiertos), D0 manual, señal, cierre con informe de tres líneas, sumar y sacar prospectos, métricas y recordatorios D+señal/D+cierre del servidor. El sistema no envía nada. |
+| Calendario, Mi plan (metas), Herramientas, Bitácora | Pendiente (etapa 2) | Pantalla honesta «todavía no está conectada». |
 | Importar el respaldo de la demo | Pendiente (etapa 2) | `POST /admin/imports` (`docs/imports.md` del backend). |
 | Comunicaciones (WhatsApp manual, correo), documentos | Pendiente (etapa 2) | |
 
