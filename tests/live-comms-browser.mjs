@@ -114,7 +114,7 @@ try {
   {
     const hourAgo = Date.now() - 3_600_000;
     const sent = ((await admin.get("/admin/communications?channel=email&limit=50")).body?.communications || []).filter((entry) => entry.confirmedBy === me.id && entry.confirmedAt && Date.parse(entry.confirmedAt) > hourAgo && entry.status !== "cancelled");
-    if (sent.length >= 19) {
+    if (sent.length >= 20) {
       const frees = new Date(Math.min(...sent.map((entry) => Date.parse(entry.confirmedAt))) + 3_600_000);
       console.log(`AVISO: el administrador de prueba ya confirmó ${sent.length} de 20 correos en la última hora (tope del servidor): se saltea Comunicaciones y se corren Documentos e Importaciones. Se libera un cupo a las ${frees.toISOString()}.`);
       emailBudget = false;
