@@ -129,8 +129,10 @@ Permisos del administrador: la interfaz oculta o explica lo que la cuenta no pue
 | Solicitudes (nueva) | Hecho | Filtros por estado, paginación por cursor, detalle con estimación y mensaje, revisión (`requests:review`), «crear proyecto desde esta solicitud». |
 | Proyectos | Hecho | Lista, ficha, alta con acuerdo + seña (idempotente), etapa, pausa/retomar/cierre, datos, hitos (crear, editar, completar con evidencia, mostrar/ocultar al cliente), actualizaciones y acciones del cliente (borrador → publicar con confirmación → retirar/resolver; notas internas), miembros, alcance y solicitudes de cambio, finanzas del servidor. |
 | Cobros | Hecho | Alta (cobrado, comprometido, propuesto, mantenimiento), transiciones, anulación, libro global por período y estado. |
-| Hoy | Parcial | Solo solicitudes por revisar y cobros comprometidos. |
-| Prospectos, Lotes, Calendario, Mi plan (metas), Herramientas, Bitácora | Pendiente (etapa 2) | Pantalla honesta «todavía no está conectada». |
+| Hoy | Hecho (etapa 2) | Agenda del sistema, metas y eventos de hoy, solicitudes, cobros comprometidos y los cinco números del servidor con definición, fuente y desglose de filas. Ver [integration-planner.md](integration-planner.md). |
+| Calendario, Mi plan (metas), Herramientas | Hecho (etapa 2) | Metas con pasos, eventos por rango con choques de horario, calculadoras que crean metas y eventos reales. Ver [integration-planner.md](integration-planner.md). |
+| Bitácora | Hecho con alcance parcial (etapa 2) | Junta la auditoría de los proyectos y prospectos recientes: la API no tiene bitácora global. Ver [integration-planner.md](integration-planner.md). |
+| Prospectos, Lotes | Pendiente (etapa 2) | Pantalla honesta «todavía no está conectada». |
 | Importar el respaldo de la demo | Pendiente (etapa 2) | `POST /admin/imports` (`docs/imports.md` del backend). |
 | Comunicaciones (WhatsApp manual, correo), documentos | Pendiente (etapa 2) | |
 

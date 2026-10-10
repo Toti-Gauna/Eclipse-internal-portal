@@ -142,7 +142,7 @@ test("el registro indexa módulos y rechaza duplicados", () => {
   assert.equal(registry.hasModal("payment-transition"), true);
   assert.ok(registry.mutation("request-review"));
   assert.deepEqual(registry.nav("main", () => true).map((item) => item.id), ["hoy", "solicitudes", "calendario", "prospectos", "lotes", "proyectos", "cobros"]);
-  assert.equal(registry.nav("main", () => true).find((item) => item.id === "calendario").status, "pending");
+  assert.equal(registry.nav("main", () => true).find((item) => item.id === "calendario").status, "live");
   assert.equal(registry.nav("main", () => false).find((item) => item.id === "cobros").allowed, false);
   assert.throws(() => createRegistry([...MODULES, { id: "proyectos" }]), /duplicado/);
   assert.throws(() => createRegistry([{ id: "a", mutations: { x: () => {} } }, { id: "b", mutations: { x: () => {} } }]), /Mutación "x" duplicado/);

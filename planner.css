@@ -1,0 +1,51 @@
+/* Planificador en modo live (Mi plan, Calendario, Herramientas, Bitácora, Hoy ampliado). Usa los tokens de styles.css / workspace.css.
+   Lo enlaza src/live/modules/planner-shared.js: no hace falta tocar index.html. */
+
+/* Metas y eventos cancelados: siguen visibles, apagados. */
+.goal-card[data-cancelled="true"] .goal-title { color: var(--fg-muted); text-decoration: line-through; text-decoration-color: var(--fg-muted); }
+.goal-card[data-cancelled="true"] .goal-phase { opacity: 0.5; }
+.calendar-entry[data-cancelled="true"] summary { color: var(--fg-muted); text-decoration: line-through; text-decoration-color: var(--fg-muted); }
+.calendar-entry[data-cancelled="true"] summary .pt-fine { text-decoration: none; }
+
+/* El paso que se está guardando (el checkbox queda deshabilitado hasta que el servidor responde). */
+.goal-checklist input:disabled { cursor: progress; }
+.goal-checklist input:disabled + .check-mark { opacity: 0.6; }
+
+/* Hoy: los cinco números. */
+.live-drill { margin-top: 4px; min-height: 44px; display: inline-flex; align-items: center; }
+.live-defs { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.live-defs summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-muted); }
+.live-defs dl { display: grid; gap: 14px; margin: 8px 0 0; }
+.live-defs dt { font-weight: 600; font-size: 0.8125rem; }
+.live-defs dd { margin: 2px 0 0; color: var(--fg-muted); font-size: 0.8125rem; line-height: 1.55; }
+.live-defs .pt-meta { display: block; margin-top: 4px; }
+.live-pipeline { display: grid; gap: 0; margin: 22px 0 14px; border-top: 1px solid var(--line); }
+.live-pipeline > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.live-pipeline dt { font-size: 0.8125rem; color: var(--fg-muted); }
+.live-pipeline dd { margin: 0; font-size: 1.0625rem; }
+@media (min-width: 768px) { .live-pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 0; } .live-pipeline > div { flex-direction: column; align-items: flex-start; gap: 6px; border: 0; border-left: 1px solid var(--line); padding: 4px 0 4px 18px; } }
+.pt-list > .pt-fine { margin-bottom: 16px; }
+
+/* Calendario: acciones dentro de cada evento y el selector de fecha. */
+.calendar-day-panel .live-inline { margin-top: 4px; }
+.calendar-day-panel .live-inline .pt-input { min-height: 44px; }
+.calendar-entry .generator-warning { margin: 8px 0; font-size: 0.75rem; }
+
+/* Bitácora. */
+.audit-scope { margin-top: 28px; }
+.audit-gaps { margin: 8px 0 0; padding-left: 20px; color: var(--fg-muted); font-size: 0.8125rem; line-height: 1.6; }
+.audit-list .pt-log-date { min-width: 0; }
+.audit-zone { white-space: nowrap; }
+.audit-list li > div { min-width: 0; overflow-wrap: anywhere; }
+.audit-recorded { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+
+/* Herramientas / Mi plan: notas honestas bajo un botón. */
+.tool-card .live-note { margin-top: 18px; }
+
+@media (max-width: 559.98px) {
+  .live-defs summary { font-size: 0.625rem; }
+  .audit-list li { gap: 8px; }
+}
+
+.audit-more { flex-wrap: wrap; gap: 12px; }
+.audit-more > div { display: flex; flex-wrap: wrap; gap: 8px; }
