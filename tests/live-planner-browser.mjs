@@ -384,7 +384,7 @@ try {
   assert.ok(await hoyRow(page, lateTitle), "el evento de hoy está en «Qué toca hoy»");
   const leadRow = await hoyRow(page, `Llamar a Planner ${stamp}`);
   assert.ok(leadRow, "la próxima acción del prospecto está en la agenda");
-  assert.match(await leadRow.textContent(), new RegExp(`Prospecto Planner ${stamp}`), "la agenda trae solo el id del prospecto: el nombre sale de la lista de prospectos");
+  assert.match(await leadRow.textContent(), new RegExp(`Prospecto Planner ${stamp}`), "el nombre del prospecto sale del detalle de la agenda o de la lista de prospectos");
   assert.match(await leadRow.textContent(), /Próxima acción/);
   assert.equal(await hoyRow(page, overlapTitle), null, "un evento cancelado no está en la agenda");
   const agendaToday = (await apiGet(context, `/admin/planner/agenda?from=${TODAY}&to=${addDays(TODAY, 7)}&ownerAdminId=${(await apiGet(context, "/auth/admin/me")).body.admin.id}`)).body.items;

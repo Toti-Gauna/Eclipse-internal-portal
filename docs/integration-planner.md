@@ -33,7 +33,7 @@ El backend no tiene una bitácora global. La pantalla junta la auditoría de los
 |---|---|---|---|
 | Bitácora global | `GET /admin/audit?cursor` con filtros | Solo auditoría por proyecto y por prospecto | Se junta la de los más recientes y se dice el alcance |
 | Actor de un registro | Email o nombre | Solo `actorId` | «Vos» / «Administrador · cuenta xxxxxxxx» |
-| Agenda de prospectos | Nombre del prospecto en cada ítem | Solo `id` y el texto de la acción (`detail` no sale en la respuesta) | Se cruza con `planner.leads` (hasta 200 prospectos); si no está, «Prospecto #id» |
+| Agenda de prospectos | `detail` (nombre del prospecto) documentado | La respuesta lo trae en los ítems de prospectos, pero OpenAPI no lo declara; los de metas, eventos y lotes no lo traen | Se usa `detail` y, si falta, `planner.leads` (hasta 200); si tampoco, «Prospecto #id» |
 | Altas del planificador | `Idempotency-Key` en `POST /goals` y `POST /events` | No existe | Un corte de red se informa como resultado incierto y no se reintenta solo |
 | Un evento por id | `GET /admin/planner/events/:id` | Solo por rango | Un enlace directo a un evento que no está en el mes cargado no lo abre; Hoy y los formularios fijan antes el día del calendario |
 | Filtro de metas | `GET /goals` sin tope | Tope de 500 sin paginación ni cursor | Se avisa por la lista; no hay más que hacer |
