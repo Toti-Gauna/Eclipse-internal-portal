@@ -3,7 +3,10 @@ import { EVENT_TYPES, GOAL_CATEGORIES, localTime } from "./planner.js";
 
 export const GENERATORS = new Set(["new-goal", "new-event", "new-prospect", "new-batch", "new-project", "new-payment", "new-subscription", "project-milestone", "project-update", "client-action"]);
 
-export function generatorConfig(wizard, data, { field, area, select, row, esc, usd, fmtDate }) {
+export function generatorConfig(wizard, data, { field, area, select, row, esc, usd, fmtDate, liveWizard }) {
+  // En modo live cada módulo aporta sus propios formularios (src/live/modules): no se usan los de demostración.
+  const live = liveWizard?.(wizard);
+  if (live !== undefined) return live;
   const today = todayISO();
   const time = localTime();
   const project = data.projects.find((item) => item.id === wizard.id);

@@ -33,14 +33,14 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site
-          cp index.html styles.css loader.css workspace.css _site/
+          cp index.html styles.css loader.css workspace.css live.css _site/
           cp -r src assets _site/
           touch _site/.nojekyll
           # Sello de versión por deploy: el navegador no puede reusar una copia vieja
           # (Pages permite guardar 10 min y Safari a veces más).
           v="${GITHUB_SHA::7}"
-          sed -i -E "s#(\./(styles|loader|workspace)\.css)#\1?v=$v#g; s#(\./src/(app|boot)\.js)#\1?v=$v#g" _site/index.html
-          find _site/src -name '*.js' -exec sed -i -E "s#(from \"\.\.?/[^\"]+\.js)\"#\1?v=$v\"#g" {} +
+          sed -i -E "s#(\./(styles|loader|workspace|live)\.css)#\1?v=$v#g; s#(\./src/(app|boot)\.js)#\1?v=$v#g" _site/index.html
+          find _site/src -name '*.js' -exec sed -i -E "s#(from \"\.\.?/[^\"]+\.js)\"#\1?v=$v\"#g; s#(import\(\"\.\.?/[^\"]+\.js)\"#\1?v=$v\"#g" {} +
           grep -q "app.js?v=$v" _site/index.html
 
       - name: Upload site artifact

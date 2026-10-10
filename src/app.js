@@ -1,4 +1,6 @@
+import { loadConfig } from "./config.js";
 import { clear, load, newId, normalize, reset, save } from "./data/store.js";
+import { emptyData } from "./data/seed.js";
 import { auditStamp, chronological, dailyAgenda, goalProgress, localTime, salesPlan, toggleGoalStep } from "./planner.js";
 import { GENERATORS, generatorConfig, renderGenerator } from "./generators.js";
 import { workspaceUI } from "./workspace-ui.js";
@@ -18,8 +20,10 @@ const NAV = [
   { id: "cobros", label: "Cobros" },
 ];
 
+// Modo: "demo" (datos de este navegador) | "live" (servidor, sin caer nunca a localStorage) | "invalid" (public-config.json roto).
+const config = await loadConfig();
 const state = {
-  data: load(),
+  data: config.mode === "demo" ? load() : emptyData(),
   filters: {
     prospectos: { search: "", stage: "activos", unit: "" },
     proyectos: { show: "activos", unit: "" },
@@ -34,6 +38,8 @@ const state = {
   calculator: { gap: "", ticket: 1500, conversion: 25, hours: 20, amount: 1000 },
 };
 state.calculator.gap = Math.max(0, bimesterProgress(state.data).goal - bimesterProgress(state.data).collected);
+/** Controlador del modo live (null en demo). Se crea más abajo, cuando las primitivas visuales ya existen. */
+let live = null;
 
 function commit(message, tone = "success") {
   const saved = save(state.data);
@@ -167,34 +173,57 @@ function prospectMark(prospect, { layout = "inline", size = 18 } = {}) {
 function routeInfo() {
   const raw = window.location.hash.replace(/^#\/?/, "") || "hoy";
   const [view, id] = raw.split("/");
-  return { view: NAV.some((item) => item.id === view) || ["metas", "herramientas", "actividad", "crear"].includes(view) ? view : "hoy", id: id ? decodeURIComponent(id) : "" };
+  const known = live ? [...live.views(), "crear"].includes(view) : NAV.some((item) => item.id === view) || ["metas", "herramientas", "actividad", "crear"].includes(view);
+  return { view: known ? view : "hoy", id: id ? decodeURIComponent(id) : "" };
+}
+
+function liveNavLinks(active) {
+  return `<ul>${live.navItems("main").map((item) => `<li><a class="hdr-link" href="#${item.id}"${item.id === active ? ' aria-current="page"' : ""}${item.status === "pending" ? ' data-pending title="Todavía no está conectada al servidor"' : ""}${!item.allowed ? ' data-denied title="Tu cuenta no tiene permiso para esta sección"' : ""}>${item.label}${item.badge ? `<span class="hdr-count" aria-label="${esc(item.badge.label)}">${item.badge.count}</span>` : ""}</a></li>`).join("")}</ul>`;
 }
 
 function navLinks(active) {
+  if (live) return liveNavLinks(active);
   const due = dailyAgenda(state.data).filter((item) => item.delta <= 0).length;
   return `<ul>${NAV.map((item) => `<li><a class="hdr-link" href="#${item.id}"${item.id === active ? ' aria-current="page"' : ""}>${item.label}${item.id === "hoy" && due ? `<span class="hdr-count" aria-label="${due} pendientes">${due}</span>` : ""}</a></li>`).join("")}</ul>`;
 }
 
+function modeBar() {
+  if (live) {
+    return `<div class="pt-notice pt-mode" data-mode="live"><div class="container-x pt-notice-row"><span class="badge-live">En vivo</span><p class="pt-notice-text">Datos del servidor <span class="readout">${esc(new URL(config.apiBaseUrl).host)}</span> · sesión de <span class="readout">${esc(live.admin?.email || "")}</span></p><button class="pt-link" type="button" data-action="live-logout">Cerrar sesión</button></div></div>`;
+  }
+  return `<div class="pt-notice pt-mode" data-mode="demo"><div class="container-x pt-notice-row"><span class="badge-demo pt-mode-badge">Modo demostración · datos de este navegador</span></div></div>`;
+}
+
+function workspaceMenu() {
+  if (live) {
+    const items = live.navItems("menu");
+    return `<nav aria-label="Mi operación">${items.map((item) => `<a href="#${item.id}"${item.status === "pending" ? " data-pending" : ""}>${esc(item.label)}<span>${esc(item.status === "pending" ? "Sin conectar todavía" : item.hint)}</span></a>`).join("")}<button type="button" data-action="open-data">Datos<span>Qué se guarda y dónde</span></button><button type="button" data-action="live-logout">Cerrar sesión<span>${esc(live.admin?.email || "")}</span></button></nav>`;
+  }
+  return `<nav aria-label="Mi operación"><a href="#metas">Mi plan<span>Metas y próximos pasos</span></a><a href="#herramientas">Herramientas<span>Ventas, capacidad y cobros</span></a><a href="#actividad">Bitácora<span>Actividad y auditoría</span></a><button type="button" data-action="open-data">Datos y respaldos<span>Exportar o importar</span></button></nav>`;
+}
+
 function shell(inner, active) {
   const dark = document.documentElement.dataset.theme !== "light";
-  const notice = state.data.example
+  const notice = state.data.example && !live
     ? `<div class="pt-notice"><div class="container-x pt-notice-row"><span class="badge-demo">Ejemplo</span><p class="pt-notice-text">Estás viendo datos de ejemplo: negocios ficticios para probar el flujo. Se guardan solo en este navegador.</p><button class="pt-link" type="button" data-action="start-clean">Empezar con mis datos</button></div></div>`
     : "";
+  const footerLinks = live ? live.navItems("menu").map((item) => `<a href="#${item.id}">${esc(item.label)}</a>`).join("") : '<a href="#metas">Mi plan</a><a href="#herramientas">Herramientas</a><a href="#actividad">Bitácora</a>';
   return `<header class="pt-header">
       <div class="container-x pt-header-row">
         <a class="pt-brand" href="#hoy" aria-label="Eclipse · Hoy">${phaseGlyph(1, 22)}<span class="pt-brand-name">ECLIPSE</span></a>
         <span class="pt-brand-label">Operación interna</span>
         <nav class="pt-nav pt-nav-desktop" aria-label="Secciones">${navLinks(active)}</nav>
-        <div class="pt-tools"><span class="hdr-rule" aria-hidden="true"></span><button class="hdr-plan" type="button" data-action="new-goal">${icon("plus")}<span>Planificar</span></button><button class="hdr-link theme-toggle" type="button" data-action="theme-toggle" aria-label="${dark ? "Activar modo claro" : "Activar modo oscuro"}" title="${dark ? "Modo claro" : "Modo oscuro"}">${icon(dark ? "sun" : "moon")}</button><details class="workspace-menu"><summary class="hdr-link" aria-label="Herramientas de operación" title="Herramientas de operación">${icon("more")}</summary><nav aria-label="Mi operación"><a href="#metas">Mi plan<span>Metas y próximos pasos</span></a><a href="#herramientas">Herramientas<span>Ventas, capacidad y cobros</span></a><a href="#actividad">Bitácora<span>Actividad y auditoría</span></a><button type="button" data-action="open-data">Datos y respaldos<span>Exportar o importar</span></button></nav></details></div>
+        <div class="pt-tools"><span class="hdr-rule" aria-hidden="true"></span>${live ? "" : `<button class="hdr-plan" type="button" data-action="new-goal">${icon("plus")}<span>Planificar</span></button>`}<button class="hdr-link theme-toggle" type="button" data-action="theme-toggle" aria-label="${dark ? "Activar modo claro" : "Activar modo oscuro"}" title="${dark ? "Modo claro" : "Modo oscuro"}">${icon(dark ? "sun" : "moon")}</button><details class="workspace-menu"><summary class="hdr-link" aria-label="Herramientas de operación" title="Herramientas de operación">${icon("more")}</summary>${workspaceMenu()}</details></div>
       </div>
       <div class="pt-nav-row"><nav class="pt-nav" aria-label="Secciones">${navLinks(active)}</nav></div>
     </header>
     <main id="main-content" class="pt-main" tabindex="-1">
       <div class="pt-light" aria-hidden="true"></div>
+      ${modeBar()}
       ${notice}
       <div class="container-x pt-page">${inner}</div>
     </main>
-    <footer class="workspace-footer container-x"><span class="label">Eclipse · Tu operación en órbita</span><nav aria-label="Herramientas de operación"><a href="#metas">Mi plan</a><a href="#herramientas">Herramientas</a><a href="#actividad">Bitácora</a></nav></footer>
+    <footer class="workspace-footer container-x"><span class="label">Eclipse · Tu operación en órbita</span><nav aria-label="Herramientas de operación">${footerLinks}</nav></footer>
     <div class="toast-region" aria-live="polite"></div>`;
 }
 
@@ -770,15 +799,15 @@ const select = (name, label, list, selected, empty) =>
   `<div class="pt-field"><label for="m-${name}">${esc(label)}</label><select class="pt-input" id="m-${name}" name="${name}">${options(list, selected, empty)}</select></div>`;
 const row = (...fields) => `<div class="pt-form-row">${fields.join("")}</div>`;
 
-function modalShell(kicker, title, text, body, submit) {
-  if (submit) {
+function modalShell(kicker, title, text, body, submit, opts = {}) {
+  if (submit && !opts.live) {
     body += row(body.includes('name="date"') ? "" : field("date", "Fecha de actividad", "date", todayISO()), field("time", "Hora local", "time", localTime()));
   }
   return `<dialog id="interaction-modal" class="modal ticks" aria-labelledby="modal-title"><div class="modal-content">
     <span class="label">${esc(kicker)}</span>
     <h2 id="modal-title" class="modal-title">${esc(title)}</h2>
     ${text ? `<p class="modal-text">${text}</p>` : ""}
-    <form class="pt-form" data-form="${esc(state.modal.type)}">${body}
+    <form class="pt-form" data-form="${esc(state.modal.type)}"${opts.live ? " data-live-form" : ""}>${body}${opts.live ? '<p class="form-error" role="alert" id="modal-error"></p>' : ""}
       <div class="modal-footer"><button class="btn btn-sm btn-ghost" type="button" data-action="close-modal">${submit ? "Cancelar" : "Cerrar"}</button>${submit ? `<button class="btn btn-sm btn-ink" type="submit">${esc(submit)}</button>` : ""}</div>
     </form>
   </div></dialog>`;
@@ -798,6 +827,13 @@ const EVENT_MODALS = {
 function modalMarkup() {
   const modal = state.modal;
   const today = todayISO();
+  if (live && live.hasModal(modal.type)) return live.modalMarkup(modal);
+  if (live && modal.type === "data") {
+    return modalShell("Datos", "Dónde viven tus datos", "En modo live todo se guarda en el servidor. Este portal no guarda copias de tu operación en el navegador: solo recuerda el tema claro u oscuro.", `
+        <div class="pt-data-actions"><button class="btn btn-sm btn-ink" type="button" data-action="export-data">Descargar lo que se ve ahora (.json)</button></div>
+        <p class="pt-fine">Es una copia de solo lectura de lo que el servidor devolvió y está cargado en pantalla. No es un respaldo del sistema: el respaldo vive en la base de datos.</p>
+        <p class="pt-fine">Importar el respaldo del modo demostración al servidor se hace con la herramienta de importación, que se conecta en la próxima etapa.</p>`, "");
+  }
 
   switch (modal.type) {
     case "prospect-event": {
@@ -1132,10 +1168,10 @@ function validateValues(type, values) {
 }
 
 function exportData() {
-  const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
+  const blob = new Blob([live ? live.exportSnapshot() : JSON.stringify(state.data, null, 2)], { type: "application/json" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `eclipse-ops-${todayISO()}.json`;
+  link.download = live ? `eclipse-servidor-${todayISO()}.json` : `eclipse-ops-${todayISO()}.json`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -1153,9 +1189,67 @@ async function importData(input) {
 
 const MODALS = new Set(["prospect-event", "batch-signal", "batch-close", "project-advance", "project-delivered", "project-pause", "project-referral"]);
 
+/** Acciones del portal que siguen valiendo en live: no escriben datos locales. */
+const LIVE_LOCAL_ACTIONS = new Set(["theme-toggle", "page", "filter", "tab", "close-modal", "open-data", "export-data", "wizard-prev", "wizard-cancel"]);
+
+/** Botones en modo live. Devuelve true si el modo live se hizo cargo (o lo bloqueó con una explicación). */
+function handleLiveAction(button) {
+  const { action, id, kind } = button.dataset;
+  switch (action) {
+    case "live-logout":
+      live.logout().then(() => { window.location.hash = "#hoy"; state.modal = null; state.wizard = null; render(); });
+      return true;
+    case "live-retry": live.retry(id, kind); return true;
+    case "live-auth-retry": live.start(); return true;
+    case "live-auth-back": live.auth.backToLogin(); return true;
+    case "live-more":
+      live.more(id, kind).catch((error) => toast(error.describe?.() || error.message, "warning"));
+      return true;
+    default: break;
+  }
+  if (live.hasWizard(action)) {
+    startGenerator({ type: action, id, kind, template: button.dataset.template, day: todayISO() });
+    return true;
+  }
+  if (live.hasModal(action)) {
+    showModal({ ...button.dataset, type: action });
+    return true;
+  }
+  if (live.hasAction(action)) {
+    runLiveAction(button, action);
+    return true;
+  }
+  if (!LIVE_LOCAL_ACTIONS.has(action)) {
+    toast("Esta acción todavía no está conectada al servidor.", "warning");
+    return true;
+  }
+  return false;
+}
+
+async function runLiveAction(button, action) {
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  try {
+    const result = await live.runAction(action, { ...button.dataset, button });
+    if (result.skipped) return;
+    if (result.message) toast(result.refreshFailed ? `${result.message} No pudimos actualizar la pantalla: recargá.` : result.message, result.refreshFailed ? "warning" : "success");
+  } catch (error) {
+    toast(describeError(error), "warning");
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    render();
+  }
+}
+
+function describeError(error) {
+  return typeof error?.describe === "function" ? error.describe() : error?.message || "Algo falló. Probá de nuevo.";
+}
+
 function handleAction(button) {
   const { action, id, kind } = button.dataset;
   if (state.wizard) captureWizard();
+  if (live && handleLiveAction(button)) return;
   if (GENERATORS.has(action)) {
     startGenerator({ type: action, id, kind, template: button.dataset.template, day: button.dataset.day || (routeInfo().view === "calendario" ? state.calendar.date : todayISO()) });
     return;
@@ -1247,6 +1341,7 @@ function handleAction(button) {
       const [group, name] = id.split(".");
       state.filters[group][name] = kind;
       render();
+      live?.prepare(routeInfo());
       break;
     }
     case "tab": state.tab = id; render(); break;
@@ -1286,10 +1381,16 @@ function handleAction(button) {
 // ---------- Render ----------
 
 const root = document.getElementById("app");
-const uiHelpers = { state, esc, icon, phaseGlyph, shell, crumbs, btn, field, area, select, row, usd, fmtDate, meter, emptyState, pagination, pageSlice, dateTime };
+const uiHelpers = {
+  state, esc, icon, phaseGlyph, shell, crumbs, btn, field, area, select, row, usd, fmtDate, meter, emptyState, pagination, pageSlice, dateTime,
+  // Para los módulos del modo live (src/live): mismas primitivas visuales, sin duplicarlas.
+  modalShell, options, dataAttrs, openLink, stageMark, dueTag, projectRail, toast: (...args) => toast(...args),
+  liveWizard: (wizard) => (live && live.hasWizard(wizard.type) ? live.wizardConfig(wizard) : undefined),
+};
 const workspace = workspaceUI(uiHelpers);
 
 function startGenerator(meta) {
+  state.formError = "";
   const previous = state.wizard?.returnTo || window.location.hash || "#hoy";
   state.modal = null;
   state.wizard = { ...meta, step: 0, values: {}, returnTo: previous.startsWith("#crear") ? "#hoy" : previous };
@@ -1306,7 +1407,10 @@ function startGenerator(meta) {
 
 function captureWizard() {
   const form = root.querySelector('[data-form="wizard"]');
-  if (form && state.wizard) Object.assign(state.wizard.values, Object.fromEntries(new FormData(form).entries()));
+  if (!form || !state.wizard) return;
+  Object.assign(state.wizard.values, Object.fromEntries(new FormData(form).entries()));
+  // Una casilla sin marcar no viaja en FormData: se guarda vacía para no arrastrar un valor viejo.
+  for (const box of form.querySelectorAll('input[type="checkbox"]')) if (!box.checked) state.wizard.values[box.name] = "";
 }
 
 function focusGenerator() {
@@ -1316,6 +1420,15 @@ function focusGenerator() {
 }
 
 function screenFor({ view, id }) {
+  if (live && view === "crear") {
+    if (!live.hasWizard(id)) return live.screenFor({ view: "hoy", id: "" });
+    if (!state.wizard || state.wizard.type !== id) {
+      state.wizard = { type: id, values: {}, step: 0, returnTo: "#hoy", day: todayISO() };
+      state.wizard.values = generatorConfig(state.wizard, state.data, uiHelpers)?.values || {};
+    }
+    return renderGenerator(state.wizard, state.data, uiHelpers);
+  }
+  if (live) return live.screenFor({ view, id });
   if (view === "crear") {
     if (!GENERATORS.has(id)) return renderHoy();
     if (!state.wizard || state.wizard.type !== id) {
@@ -1336,12 +1449,47 @@ function screenFor({ view, id }) {
   return renderHoy();
 }
 
+function configErrorScreen() {
+  const dark = document.documentElement.dataset.theme !== "light";
+  return `<header class="pt-header"><div class="container-x pt-header-row"><a class="pt-brand" href="#hoy" aria-label="Eclipse">${phaseGlyph(1, 22)}<span class="pt-brand-name">ECLIPSE</span></a><div class="pt-tools" style="margin-left:auto"><button class="hdr-link theme-toggle" type="button" data-action="theme-toggle" aria-label="${dark ? "Activar modo claro" : "Activar modo oscuro"}">${icon(dark ? "sun" : "moon")}</button></div></div></header>
+    <main id="main-content" class="pt-main" tabindex="-1"><div class="pt-light" aria-hidden="true"></div><div class="container-x pt-page live-auth"><section class="live-auth-card ticks" aria-labelledby="cfg-title">
+      <span class="label">Configuración</span><h1 id="cfg-title" class="display live-auth-title">La configuración <em>no es válida</em>.</h1>
+      <p class="pt-company">Se encontró public-config.json pero tiene errores. Por seguridad el portal no arranca en modo demostración en su lugar: corregí el archivo y recargá.</p>
+      <ul class="live-config-errors" role="alert">${(config.errors || []).map((error) => `<li>${esc(error)}</li>`).join("")}</ul>
+      <p class="pt-fine">Se genera con <span class="readout">node scripts/build-public-config.mjs</span>. Guía: docs/integration.md.</p></section></div></main>`;
+}
+
+/** Los cambios de datos del servidor llegan sueltos: se juntan en un solo dibujado y no pisan un diálogo abierto. */
+let renderQueued = false;
+function requestRender({ fromData = false } = {}) {
+  if (renderQueued) return;
+  renderQueued = true;
+  queueMicrotask(() => {
+    renderQueued = false;
+    if (fromData && state.modal) return;
+    if (state.wizard) captureWizard();
+    render();
+  });
+}
+
 function render() {
   const active = document.activeElement;
   const focusId = active?.id && root.contains(active) ? active.id : null;
   const caret = focusId && typeof active.selectionStart === "number" ? active.selectionStart : null;
 
+  if (config.mode === "invalid") { root.innerHTML = configErrorScreen(); return; }
+  if (live && !live.ready) {
+    root.innerHTML = live.authScreen({ dark: document.documentElement.dataset.theme !== "light" });
+    root.querySelector("[data-autofocus]")?.focus({ preventScroll: true });
+    return;
+  }
   root.innerHTML = screenFor(routeInfo()) + (state.modal ? modalMarkup() : "");
+  if (live) {
+    // Un dibujado en medio de un envío no puede perder el error ni rehabilitar el botón.
+    const errorEl = root.querySelector("#wizard-error, #modal-error");
+    if (errorEl && state.formError) errorEl.textContent = state.formError;
+    if (state.submitting) root.querySelectorAll('[data-form="wizard"] button[type="submit"], [data-live-form] button[type="submit"]').forEach((button) => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
+  }
 
   if (focusId) {
     const again = document.getElementById(focusId);
@@ -1357,12 +1505,20 @@ function render() {
 }
 
 function showModal(modal) {
+  state.formError = "";
   state.modal = modal;
   render();
 }
 
 function closeModal() {
   state.modal = null;
+  render();
+}
+
+/** Los módulos live actualizan el diálogo abierto (p. ej. el resultado de buscar una cuenta). */
+function setModal(patch) {
+  if (!state.modal) return;
+  state.modal = { ...state.modal, ...patch };
   render();
 }
 
@@ -1374,6 +1530,50 @@ function toast(message, tone = "success") {
   item.textContent = message;
   region.append(item);
   setTimeout(() => item.remove(), 4200);
+}
+
+/**
+ * Envío en modo live: la interfaz espera al servidor. El éxito se muestra SOLO después de que el servidor confirma (y de volver a
+ * pedir los datos); si falla, el formulario queda abierto con el motivo y se puede reintentar (misma clave de idempotencia).
+ */
+async function submitLive(form, type, values, { wizard = null, modal = null }) {
+  if (state.submitting) return;
+  const submit = form.querySelector('button[type="submit"]');
+  const label = submit?.textContent;
+  const errorEl = wizard ? document.getElementById("wizard-error") : document.getElementById("modal-error");
+  state.submitting = true;
+  state.formError = "";
+  if (errorEl) errorEl.textContent = "";
+  if (submit) { submit.disabled = true; submit.setAttribute("aria-busy", "true"); submit.textContent = "Guardando…"; }
+  const guarded = form.querySelectorAll('[data-action="wizard-prev"], [data-action="wizard-cancel"], [data-action="close-modal"]');
+  guarded.forEach((control) => { control.disabled = true; });
+  try {
+    const { type: _modalType, ...target } = modal || {};
+    const scope = wizard ? `wizard:${wizard.type}:${wizard.id || ""}:${wizard.kind || ""}` : `modal:${type}:${target.id || ""}:${target.kind || ""}:${target.to || ""}`;
+    const result = await live.submit(type, values, { target: wizard ? { id: wizard.id, kind: wizard.kind, returnTo: wizard.returnTo } : target, modal, scope });
+    if (result.skipped) return;
+    state.submitting = false;
+    if (wizard) {
+      state.wizard = null;
+      if (window.location.hash.startsWith("#crear")) window.location.hash = result.goto || wizard.returnTo;
+    } else {
+      state.modal = null;
+      if (result.goto) window.location.hash = result.goto;
+    }
+    render();
+    toast(result.refreshFailed ? `${result.message} No pudimos actualizar la pantalla: recargá para ver todo.` : result.message, result.refreshFailed ? "warning" : "success");
+  } catch (error) {
+    state.formError = error?.name === "FormError" ? error.message : describeError(error);
+    const target = document.getElementById(wizard ? "wizard-error" : "modal-error");
+    if (target) target.textContent = state.formError;
+    else if (!wizard && !state.modal) toast(state.formError, "warning");
+  } finally {
+    state.submitting = false;
+    const again = form.isConnected ? form : root.querySelector(wizard ? '[data-form="wizard"]' : "[data-live-form]");
+    const button = again?.querySelector('button[type="submit"]');
+    if (button && (state.wizard || state.modal)) { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = label; }
+    again?.querySelectorAll('[data-action="wizard-prev"], [data-action="wizard-cancel"], [data-action="close-modal"]').forEach((control) => { control.disabled = false; });
+  }
 }
 
 root.addEventListener("click", (event) => {
@@ -1390,6 +1590,7 @@ function onFilter(event) {
 }
 root.addEventListener("input", onFilter);
 root.addEventListener("input", (event) => {
+  if (event.target.id === "auth-code") event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6);
   if (event.target.matches("input, textarea") && event.target.validity.customError) event.target.setCustomValidity("");
   const input = event.target.closest("[data-calc]");
   if (!input) return;
@@ -1397,6 +1598,11 @@ root.addEventListener("input", (event) => {
   render();
 });
 root.addEventListener("change", (event) => {
+  if (event.target.matches("[data-rerender]") && state.wizard) {
+    captureWizard();
+    render();
+    return;
+  }
   if (event.target.matches('[name="inspiration"]') && state.wizard?.type === "new-goal") {
     captureWizard();
     const inspiration = agenda(state.data).find((item) => `${item.entity}:${item.id}:${item.kind}` === event.target.value);
@@ -1432,6 +1638,11 @@ root.addEventListener("submit", (event) => {
     input.setCustomValidity(input.required && !input.value.trim() ? "Completá este campo." : "");
   }
   if (!form.reportValidity()) return;
+  if (live && ["live-login", "live-mfa"].includes(form.dataset.form)) {
+    if (form.dataset.form === "live-login") live.auth.submitCredentials(form.elements.email.value, form.elements.password.value);
+    else live.auth.submitCode(form.elements.code.value.trim());
+    return;
+  }
   if (form.dataset.form === "wizard") {
     captureWizard();
     const wizard = state.wizard;
@@ -1453,6 +1664,7 @@ root.addEventListener("submit", (event) => {
         return;
       }
     }
+    if (live) { submitLive(form, wizard.type, values, { wizard }); return; }
     const error = validateValues(wizard.type, values);
     if (error) { document.getElementById("wizard-error").textContent = error; return; }
     const before = structuredClone(state.data);
@@ -1464,9 +1676,13 @@ root.addEventListener("submit", (event) => {
     commit(message);
     return;
   }
+  const values = Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]));
+  if (live) {
+    if (live.hasModal(form.dataset.form)) submitLive(form, form.dataset.form, values, { modal: state.modal });
+    return;
+  }
   const handler = SUBMITS[form.dataset.form];
   if (!handler) return;
-  const values = Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]));
   const error = validateValues(form.dataset.form, values);
   if (error) { toast(error, "warning"); return; }
   const before = structuredClone(state.data);
@@ -1479,7 +1695,9 @@ window.addEventListener("hashchange", () => {
   captureWizard();
   if (routeInfo().view !== "crear") state.wizard = null;
   state.modal = null;
+  state.formError = "";
   state.tab = "updates";
+  live?.prepare(routeInfo());
   render();
   window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   document.getElementById("main-content")?.focus({ preventScroll: true });
@@ -1494,6 +1712,7 @@ window.addEventListener("storage", (event) => {
     render();
     return;
   }
+  if (live) return;
   if (event.key && event.key.startsWith("eclipse-ops")) {
     captureWizard();
     state.data = load();
@@ -1501,4 +1720,31 @@ window.addEventListener("storage", (event) => {
   }
 });
 
-render();
+// ---------- Arranque ----------
+
+if (config.mode === "live") {
+  const { createLive } = await import("./live/index.js");
+  live = createLive({
+    config,
+    ui: uiHelpers,
+    hooks: {
+      state,
+      requestRender,
+      setModal,
+      onReady() {
+        state.modal = null;
+        state.wizard = null;
+        state.formError = "";
+        if (!window.location.hash) window.location.hash = "#hoy";
+        live.prepare(routeInfo());
+        render();
+      },
+    },
+  });
+  // Cada módulo declara sus filtros por defecto; los del modo live pisan los de demo.
+  for (const [group, defaults] of Object.entries(live.initialFilters())) state.filters[group] = { ...(state.filters[group] || {}), ...defaults };
+  render();
+  live.start();
+} else {
+  render();
+}

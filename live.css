@@ -1,0 +1,69 @@
+/* Modo live: pantallas y piezas que usan los mismos tokens que styles.css / workspace.css (ambos temas). */
+
+/* ---- Indicador de modo ------------------------------------------------------- */
+.pt-mode { border-bottom: 1px solid var(--line); }
+.pt-mode .pt-notice-row { padding-block: 6px; }
+.pt-mode-badge { height: auto; min-height: 1.5rem; max-width: 100%; padding-block: 4px; white-space: normal; line-height: 1.25; font-size: 0.6875rem; }
+.badge-live {
+  display: inline-flex; align-items: center; gap: 0.4rem; height: 1.5rem; padding: 0 0.6rem; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg); border: 1px solid var(--line-strong);
+}
+.badge-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--corona); box-shadow: 0 0 0 2px rgb(245 185 66 / 0.25); }
+.pt-mode[data-mode="live"] .pt-notice-text { overflow-wrap: anywhere; }
+
+/* Secciones sin conectar / sin permiso: visibles, pero apagadas. */
+.hdr-link[data-pending], .hdr-link[data-denied] { opacity: 0.62; }
+.workspace-menu a[data-pending] span { font-style: italic; }
+
+/* ---- Ingreso ----------------------------------------------------------------- */
+.live-auth { display: grid; justify-items: center; padding-top: clamp(20px, 6vh, 64px); }
+.live-auth-card { width: min(100%, 36rem); padding: 28px 22px 26px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+@media (min-width: 640px) { .live-auth-card { padding: 40px 40px 34px; } }
+.live-auth-title { margin: 12px 0 0; font-size: clamp(2.3rem, 9vw, 3.6rem); line-height: 0.96; }
+.live-auth-form { margin-top: 26px; gap: 16px; }
+.live-auth-form .pt-input { min-height: 52px; padding: 12px 16px; }
+.live-code-input { text-align: center; font-size: 1.75rem; letter-spacing: 0.5em; padding-left: 0.5em; }
+.live-auth-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.live-auth-actions .btn { flex: 1 1 10rem; }
+.live-auth-error { min-height: 0; }
+.live-auth-notice { margin: 0; padding: 10px 12px; border-left: 2px solid var(--corona); background: var(--ambient); }
+.live-auth-warning { margin: 22px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.live-auth-foot { margin: 16px 0 0; text-align: center; }
+.live-auth-checking { display: flex; align-items: center; gap: 14px; padding-block: 18px; color: var(--accent); }
+.live-auth-checking .pt-h2 { color: var(--fg); }
+.live-config-errors { margin: 18px 0; padding-left: 20px; color: var(--late); font-size: 0.9375rem; line-height: 1.5; }
+
+/* ---- Estados de carga ------------------------------------------------------- */
+.live-loading { border-top: 1px solid var(--line); }
+.live-loading svg { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .live-loading svg { animation: live-pulse 1.6s ease-in-out infinite; } }
+@keyframes live-pulse { 50% { opacity: 0.35; } }
+.live-error .pt-empty-title { color: var(--late); }
+.live-stale { margin: 0 0 12px; padding: 8px 12px; border-left: 2px solid var(--late); background: var(--surface); }
+.live-note { max-width: 56rem; margin-top: 14px; }
+.live-pending { display: flex; gap: 18px; align-items: flex-start; margin-top: 36px; padding: 22px 0; border-top: 1px solid var(--fg); }
+.live-pending svg { flex: none; color: var(--accent); margin-top: 4px; }
+.live-pending p { margin: 0 0 8px; }
+
+/* ---- Contenido de servidor -------------------------------------------------- */
+.live-prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.live-quote { padding: 12px 14px; border-left: 2px solid var(--line-strong); background: var(--surface); }
+.live-dl { margin-top: 16px; }
+.live-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.live-milestones li, .live-payments li { flex-wrap: wrap; row-gap: 8px; }
+.live-milestones li > span:first-child, .live-payments li > span:nth-child(2) { flex: 1 1 14rem; min-width: 0; }
+.live-milestones .pt-actions, .live-payments .pt-actions { margin-top: 0; flex: 1 0 100%; justify-content: flex-start; }
+.live-milestones .pt-meta, .live-payments .pt-meta { overflow-wrap: anywhere; }
+.live-members { display: grid; gap: 10px; margin-top: 24px; }
+.live-check label { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; font-size: 0.9375rem; font-weight: 500; cursor: pointer; }
+.live-check input[type="checkbox"] { flex: none; width: 22px; height: 22px; margin-top: 1px; accent-color: var(--corona); }
+.live-preview { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-strong); }
+.live-preview p { margin: 0; }
+.live-lookup { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-strong); }
+.live-lookup p { margin: 0; }
+.live-inline { display: flex; flex-wrap: wrap; gap: 8px; }
+.live-inline .pt-input { flex: 1 1 14rem; }
+.generator-warning { margin: 0 0 14px; }
+@media (max-width: 559.98px) {
+  .live-pending { flex-direction: column; gap: 8px; }
+}
