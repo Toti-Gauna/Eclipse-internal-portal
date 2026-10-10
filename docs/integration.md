@@ -117,7 +117,8 @@ Backend: **Eclipse-be OpenAPI 0.7.0** (`src/docs/openapi.json`), probado contra 
 | Actualizaciones | `GET/POST …/updates`, `PATCH …/updates/:id`, `POST …/publish`, `…/withdraw`, `…/resolve` |
 | Alcance | `GET …/scope`, `POST …/change-requests`, `PATCH …/change-requests/:id`, `POST …/decision` |
 | Cobros | `GET/POST …/payments`, `PATCH …/payments/:id`, `GET …/finance` |
-| **No usados todavía** (etapa 2) | leads, batches, planner, reports, communications, documents, imports, issues (bloqueos/riesgos), organizaciones, auditoría global |
+| Etapa 2 | leads, lotes, planner, reports, communications, documents, imports (ver las tablas de abajo y `integration-planner.md`) |
+| **No usados todavía** | issues (bloqueos/riesgos), organizaciones, auditoría global (la API no la tiene) |
 
 Permisos del administrador: la interfaz oculta o explica lo que la cuenta no puede hacer (`requests:read|review`, `projects:read|write`, `billing:read|write`, `updates:send`, `clients:read`) y un 403 se muestra con su causa. Las decisiones de seguridad siguen siendo del servidor.
 
