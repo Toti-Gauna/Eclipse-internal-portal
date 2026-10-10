@@ -107,7 +107,7 @@ export default {
       const inspirations = goal ? [] : loadedAgenda(ctx.repo).filter(isOperationItem).filter((item) => item.date <= todayISO() || item.overdue).slice(0, 30);
       const picked = wizard.values?.inspiration && wizard.values.inspirationApplied !== wizard.values.inspiration ? inspirations.find((item) => `${item.type}:${item.id}` === wizard.values.inspiration) : null;
       if (picked) {
-        const who = leadName(ctx, picked.id);
+        const who = leadName(ctx, picked.id) || picked.detail;
         const isLead = ["lead_next_action", "lead_review", "proposal_touch"].includes(picked.type);
         Object.assign(wizard.values, { title: (who ? `${picked.title} · ${who}` : picked.title).slice(0, 160), category: "sales", reference: isLead ? `lead:${picked.id}` : "", notes: `Viene de la agenda (${picked.typeLabel}). Vencimiento: ${fmtDate(picked.date, true)}.`, inspirationApplied: wizard.values.inspiration });
       }
@@ -122,7 +122,7 @@ export default {
         values: v,
         steps: [
           ["Intención", "¿Qué querés lograr?",
-            (inspirations.length ? select("inspiration", "Elegir una acción pendiente de la agenda · opcional", inspirations.map((item) => [`${item.type}:${item.id}`, `${item.title}${leadName(ctx, item.id) ? ` · ${leadName(ctx, item.id)}` : ""} (${item.typeLabel})`]), v.inspiration, "Escribir mi propia meta").replace("<select", "<select data-rerender") : "")
+            (inspirations.length ? select("inspiration", "Elegir una acción pendiente de la agenda · opcional", inspirations.map((item) => [`${item.type}:${item.id}`, `${item.title}${leadName(ctx, item.id) || item.detail ? ` · ${leadName(ctx, item.id) || item.detail}` : ""} (${item.typeLabel})`]), v.inspiration, "Escribir mi propia meta").replace("<select", "<select data-rerender") : "")
             + field("title", "Meta", "text", v.title, 'required maxlength="160" placeholder="Ej. Dejar lista la propuesta de la clínica"')
             + row(select("category", "Área", categories, v.category), select("priority", "Prioridad", priorities, v.priority))
             + area("notes", "Contexto o resultado esperado · opcional", v.notes, 'maxlength="2000" rows="3"')

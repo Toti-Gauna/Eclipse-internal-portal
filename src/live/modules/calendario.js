@@ -58,7 +58,7 @@ export function calendarItems(ctx, from, to) {
   const leads = repo.data("planner.leads")?.list || [];
   for (const item of repo.data("planner.agenda", `${key}|all`) || []) {
     if (!isOperationItem(item) || !inside(item.date)) continue;
-    const who = leads.find((lead) => lead.id === item.id)?.name;
+    const who = leads.find((lead) => lead.id === item.id)?.name || item.detail;
     items.push({ key: `agenda:${item.key}`, type: "operación", kind: "agenda", date: item.date, time: item.time, title: item.title || item.typeLabel, name: who ? `${item.typeLabel} · ${who}` : item.typeLabel, completed: false, href: item.href });
   }
   for (const project of repo.data("projects")?.list || []) {

@@ -130,7 +130,7 @@ function agendaRow(ctx, item, today) {
   }
   return {
     title: item.title || item.typeLabel,
-    name: isLead ? (who || `Prospecto #${shortId(item.id)}`) : goal ? goal.categoryLabel : event ? event.typeLabel : item.typeLabel,
+    name: isLead ? (who || item.detail || `Prospecto #${shortId(item.id)}`) : goal ? goal.categoryLabel : event ? event.typeLabel : item.typeLabel,
     where: `${item.typeLabel}${item.mine ? "" : " · de otra persona"}`,
     due: item.date, time: item.time, href: item.href, action,
   };
