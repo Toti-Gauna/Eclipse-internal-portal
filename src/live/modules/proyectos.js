@@ -207,9 +207,16 @@ function ficha(ctx, project) {
           <div><dt>Versión del registro</dt><dd class="readout">${project.version}</dd></div>
         </dl>
         ${members(ctx, project, writable)}
+        ${projectLinks(ctx, project)}
         <a class="pt-link" href="#proyectos">${icon("back")} Volver a proyectos</a>
       </aside>
     </div>`;
+}
+
+/** Enlaces de otros módulos a este proyecto (Comunicaciones, Documentos…): cada módulo declara projectLinks(ctx, project). */
+function projectLinks(ctx, project) {
+  const links = ctx.registry.modules.map((module) => module.projectLinks?.(ctx, project) || "").join("");
+  return links ? `<div class="live-members"><span class="label">Comunicar y documentar</span>${links}</div>` : "";
 }
 
 function tabAction(ctx, tab, id, writable) {

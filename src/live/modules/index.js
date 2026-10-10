@@ -8,6 +8,9 @@ import cobros from "./cobros.js";
 import planner from "./planner.js";
 import prospectos from "./prospectos.js";
 import lotes from "./lotes.js";
+import comunicaciones from "./comunicaciones.js";
+import documentos from "./documentos.js";
+import importar from "./importar.js";
 import pending from "./pending.js";
 
-export const MODULES = [core, hoy, solicitudes, proyectos, cobros, ...planner, prospectos, lotes, ...pending];
+export const MODULES = [core, hoy, solicitudes, proyectos, cobros, ...planner, prospectos, lotes, comunicaciones, documentos, importar, ...pending];
