@@ -213,7 +213,7 @@ function shell(inner, active) {
         <a class="pt-brand" href="#hoy" aria-label="Eclipse · Hoy">${phaseGlyph(1, 22)}<span class="pt-brand-name">ECLIPSE</span></a>
         <span class="pt-brand-label">Operación interna</span>
         <nav class="pt-nav pt-nav-desktop" aria-label="Secciones">${navLinks(active)}</nav>
-        <div class="pt-tools"><span class="hdr-rule" aria-hidden="true"></span>${live ? "" : `<button class="hdr-plan" type="button" data-action="new-goal">${icon("plus")}<span>Planificar</span></button>`}<button class="hdr-link theme-toggle" type="button" data-action="theme-toggle" aria-label="${dark ? "Activar modo claro" : "Activar modo oscuro"}" title="${dark ? "Modo claro" : "Modo oscuro"}">${icon(dark ? "sun" : "moon")}</button><details class="workspace-menu"><summary class="hdr-link" aria-label="Herramientas de operación" title="Herramientas de operación">${icon("more")}</summary>${workspaceMenu()}</details></div>
+        <div class="pt-tools"><span class="hdr-rule" aria-hidden="true"></span>${live && !live.can("planner:write") ? "" : `<button class="hdr-plan" type="button" data-action="new-goal">${icon("plus")}<span>Planificar</span></button>`}<button class="hdr-link theme-toggle" type="button" data-action="theme-toggle" aria-label="${dark ? "Activar modo claro" : "Activar modo oscuro"}" title="${dark ? "Modo claro" : "Modo oscuro"}">${icon(dark ? "sun" : "moon")}</button><details class="workspace-menu"><summary class="hdr-link" aria-label="Herramientas de operación" title="Herramientas de operación">${icon("more")}</summary>${workspaceMenu()}</details></div>
       </div>
       <div class="pt-nav-row"><nav class="pt-nav" aria-label="Secciones">${navLinks(active)}</nav></div>
     </header>
