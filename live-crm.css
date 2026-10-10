@@ -1,0 +1,38 @@
+/* Prospectos y Lotes en modo live. Mismos tokens que styles.css / workspace.css / live.css (ambos temas). Se enlaza desde src/live/modules/crm-styles.js. */
+
+.live-tag { margin-top: 6px; }
+.live-note { max-width: 56rem; }
+
+/* Filtros */
+.live-toggle { min-height: 44px; border-radius: 22px; }
+.live-toggle[aria-pressed="true"] { background: var(--surface-strong); border-color: var(--fg); color: var(--fg); }
+.live-more-filters { margin-top: 12px; }
+.live-more-filters summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-size: 0.875rem; color: var(--fg-muted); }
+.live-more-filters summary:hover { color: var(--fg); }
+.live-inline-label { font-size: 0.8125rem; color: var(--fg-muted); }
+.live-stale-list { opacity: 0.55; transition: opacity 0.15s linear; }
+@media (prefers-reduced-motion: reduce) { .live-stale-list { transition: none; } }
+
+/* Ficha del prospecto */
+.live-rule { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-strong); }
+.live-side-actions { display: grid; gap: 8px; margin-top: 24px; }
+.live-side-actions .btn { justify-content: flex-start; min-height: 44px; }
+.live-dups { display: grid; gap: 8px; margin-top: 24px; padding: 14px 16px; border: 1px solid var(--line); border-left: 3px solid var(--corona); border-radius: 6px; background: var(--surface); }
+.live-dups ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.live-dups li { display: grid; gap: 4px; }
+.live-dups p { margin: 0; }
+.pt-log-item[data-voided] .pt-log-text { text-decoration: line-through; opacity: 0.7; }
+.pt-log-item[data-voided] .pt-log-title { opacity: 0.8; }
+.live-audit { display: grid; gap: 12px; margin: 18px 0 0; padding: 0; list-style: none; }
+.live-audit li { display: grid; gap: 4px 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+@media (min-width: 640px) { .live-audit li { grid-template-columns: 9rem minmax(0, 1fr); } }
+.live-audit .pt-meta { display: block; }
+
+/* Sumar prospectos a un lote */
+.live-pick { display: grid; gap: 2px; max-height: 22rem; overflow-y: auto; margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; }
+.live-pick legend { padding: 0 6px; }
+.live-pick .pt-field { margin: 0; }
+.live-pick .live-check label { min-height: 44px; align-items: center; }
+
+/* Las filas de la lista no se desbordan con nombres largos */
+.pt-row .pt-row-name, .pt-row .pt-meta { overflow-wrap: anywhere; }

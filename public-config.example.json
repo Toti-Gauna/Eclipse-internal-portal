@@ -1,0 +1,6 @@
+{
+  "mode": "live",
+  "apiBaseUrl": "http://localhost:3100/api/v1",
+  "clientPortalUrl": "http://localhost:3001/es/portal",
+  "whatsappMode": "manual"
+}

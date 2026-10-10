@@ -12,15 +12,18 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const siteRoot = process.env.SITE_DIR ? resolve(process.env.SITE_DIR) : root;
 const artifacts = resolve(root, "test-results");
 await mkdir(artifacts, { recursive: true });
-const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2" };
+const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".json": "application/json" };
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     const path = resolve(siteRoot, `.${pathname === "/" ? "/index.html" : pathname}`);
     if (!path.startsWith(`${siteRoot}/`)) { res.writeHead(403).end(); return; }
+    // Esta prueba es del modo demostración: un public-config.json local (modo live) no debe cambiarla.
+    if (pathname === "/public-config.json") { res.writeHead(404).end(); return; }
+    const body = await readFile(path);
     res.writeHead(200, { "Content-Type": mime[extname(path)] || "application/octet-stream" });
-    res.end(await readFile(path));
-  } catch { res.writeHead(404).end(); }
+    res.end(body);
+  } catch { if (!res.headersSent) res.writeHead(404); res.end(); }
 });
 await new Promise((done) => server.listen(0, "127.0.0.1", done));
 const base = `http://127.0.0.1:${server.address().port}`;
