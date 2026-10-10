@@ -7,6 +7,4 @@ const pending = (id, label, nav, pendingText) => ({
 });
 
 export default [
-  pending("prospectos", "Prospectos", { order: 30, area: "main" }, "El pipeline se conecta con los leads del servidor (leads:read)."),
-  pending("lotes", "Lotes", { order: 35, area: "main" }, "Los lotes de prospección se conectan con los lotes del servidor (leads:read)."),
 ];

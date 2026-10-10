@@ -7,6 +7,7 @@
     "test:browser": "node tests/browser.mjs",
     "test:live": "node tests/live-browser.mjs",
     "test:live:planner": "node tests/live-planner-browser.mjs",
+    "test:live:crm": "node tests/live-crm-browser.mjs",
     "config": "node scripts/build-public-config.mjs",
     "test:e2e:full": "node tests/e2e-full-flow.mjs"
   },

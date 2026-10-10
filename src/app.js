@@ -1600,6 +1600,7 @@ function onFilter(event) {
   const [group, name] = input.dataset.filter.split(".");
   state.filters[group][name] = input.value;
   render();
+  live?.prepare(routeInfo());
 }
 root.addEventListener("input", onFilter);
 root.addEventListener("input", (event) => {
