@@ -14,6 +14,9 @@ function range(period, today) {
   return ["0000-00-00", "9999-99-99"];
 }
 
+/** Los proyectos abiertos primero: son los que mueven plata. Tope para no saturar el límite de la API. */
+const shownProjects = (list) => [...list].sort((a, b) => Number(a.stage === "closed") - Number(b.stage === "closed")).slice(0, PROJECT_LIMIT);
+
 /** Todos los pagos conocidos + cuántos proyectos faltan por cargar. */
 export function collectPayments(repo, projects) {
   const payments = [];
@@ -39,8 +42,8 @@ export default {
   prepare(ctx) {
     const { repo } = ctx;
     repo.ensure("projects").then((data) => {
-      const ids = data.list.slice(0, PROJECT_LIMIT).map((project) => project.id);
-      repo.ensureAll("project.payments", ids);
+      const ids = shownProjects(data.list).map((project) => project.id);
+      repo.ensureAll("project.payments", ids, { maxAge: 300_000 });
     }).catch(() => {});
   },
 
@@ -51,7 +54,7 @@ export default {
     const today = todayISO();
     const entry = ctx.repo.get("projects");
     const body = (data) => {
-      const shown = data.list.slice(0, PROJECT_LIMIT);
+      const shown = shownProjects(data.list);
       const { payments, loading, failed } = collectPayments(ctx.repo, shown);
       const [from, to] = range(f.period, today);
       // "Todo" incluye también lo que aún no tiene fecha (propuestos sin vencimiento).

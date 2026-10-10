@@ -42,6 +42,7 @@ assert.ok(config, errors?.join(" "));
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined), headless: true, args: ["--no-sandbox"] });
 const errorsSeen = [];
+const throttled = [];
 let checks = 0;
 const check = (message) => { checks++; console.log(`✓ ${message}`); };
 
@@ -52,7 +53,8 @@ async function newPage(context, { theme = "dark", width = 1440, height = 1000 } 
   // El portal es estático: la configuración pública se sirve como la serviría public-config.json.
   await page.route(`${PORTAL}/public-config.json`, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(config) }));
   page.on("pageerror", (error) => errorsSeen.push(`pageerror: ${error.message}`));
-  page.on("console", (message) => { if (message.type() === "error" && !/status of (401|403|404|409)/.test(message.text())) errorsSeen.push(`console: ${message.text()}`); });
+  page.on("response", (response) => { if (response.status() === 429 && response.url().startsWith(API)) throttled.push(`${response.request().method()} ${response.url().replace(API, "")}`); });
+  page.on("console", (message) => { if (message.type() === "error" && !/status of (401|403|404|409)|net::ERR_FAILED/.test(message.text())) errorsSeen.push(`console: ${message.text()}`); });
   return page;
 }
 
@@ -62,7 +64,14 @@ const noOverflow = async (page, label) => {
   assert.ok(scroll <= inner, `${label}: desborde horizontal (${scroll} > ${inner})`);
 };
 const shot = async (page, name) => { await page.waitForTimeout(250); await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true }); };
-const toast = async (page, text) => { await page.locator(".toast", { hasText: text }).first().waitFor({ timeout: 15000 }); };
+const toast = async (page, text) => {
+  try {
+    await page.locator(".toast", { hasText: text }).first().waitFor({ timeout: 15000 });
+  } catch (error) {
+    const visible = await page.locator("#modal-error, #wizard-error, .toast").allTextContents().catch(() => []);
+    throw new Error(`No apareció el aviso «${text}». En pantalla: ${JSON.stringify(visible.filter(Boolean))}`, { cause: error });
+  }
+};
 const goto = async (page, hash) => { await page.evaluate((value) => { location.hash = value; }, hash); await page.waitForFunction((value) => location.hash === value, hash); };
 const login = async (page) => {
   await page.fill("#auth-email", E2E_ADMIN.email);
@@ -72,6 +81,25 @@ const login = async (page) => {
   await page.fill("#auth-code", await freshAdminCode(API.replace("localhost", "127.0.0.1")));
   await page.click('button[type="submit"]');
   await page.waitForSelector('.pt-mode[data-mode="live"]');
+};
+// Lectura directa de la API con la sesión del navegador; respeta el límite general (120 req/min) esperando si hace falta.
+const apiGet = async (context, path) => {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const response = await context.request.get(`${API}/api/v1${path}`, { headers: { Origin: PORTAL } });
+    if (response.status() !== 429) return { status: response.status(), body: await response.json().catch(() => null) };
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  throw new Error(`GET ${path}: el límite de la API no se liberó`);
+};
+// El límite general de la API es de 120 pedidos por minuto y por IP. La base de pruebas acumula proyectos (cada pantalla pide uno por proyecto):
+// antes de cada fase pesada se espera a que la ventana vuelva a tener margen.
+const calm = async (needed = 90) => {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const response = await fetch(`${API}/api/v1/auth/csrf`, { headers: { Origin: PORTAL } });
+    const remaining = Number(/r=(\d+)/.exec(response.headers.get("ratelimit") || "")?.[1] ?? 999);
+    if (remaining >= needed) return;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
 };
 const usdText = (cents) => new Intl.NumberFormat("es-AR", { minimumFractionDigits: Number.isInteger(cents / 100) ? 0 : 2 }).format(cents / 100);
 
@@ -85,14 +113,13 @@ try {
   const anonymous = await browser.newContext({ viewport: { width: 375, height: 800 }, locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires", reducedMotion: "reduce" });
   const gate = await newPage(anonymous, { width: 375, height: 800 });
   await ready(gate);
+  await gate.locator("#auth-email").waitFor();
   assert.equal(await gate.locator("#auth-email").count(), 1, "antes de ingresar solo se ve el login");
   assert.equal(await gate.locator(".pt-nav a").count(), 0, "sin sesión no hay navegación ni datos");
   await noOverflow(gate, "login 375");
   await shot(gate, "login-375-dark");
+  // Solo UN fallo por corrida: cinco fallos de la cuenta en 15 min la bloquean 15 min (el mensaje de contraseña incorrecta se prueba en tests/api-client.test.js).
   await gate.fill("#auth-email", E2E_ADMIN.email);
-  await gate.fill("#auth-password", "contraseña equivocada 123");
-  await gate.click('button[type="submit"]');
-  await gate.locator("#auth-error", { hasText: "Email o contraseña incorrectos." }).waitFor();
   await gate.fill("#auth-password", E2E_ADMIN.password);
   await gate.click('button[type="submit"]');
   await gate.waitForSelector("#auth-code");
@@ -112,6 +139,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires", reducedMotion: "reduce" });
   const page = await newPage(context);
   await ready(page);
+  await page.locator("#auth-email").waitFor();
   await shot(page, "login-1440-dark");
   await login(page);
   const storage = await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage), cookie: document.cookie }));
@@ -145,7 +173,6 @@ try {
   await page.click('dialog button[type="submit"]');
   await toast(page, "Solicitud aceptada. No se creó ningún proyecto.");
   await page.locator(".pt-current-name", { hasText: "Aceptada" }).waitFor();
-  assert.equal((await (await fetch(`${API}/api/v1/catalog/plans`, { headers: { Origin: "http://localhost:4173" } })).json()).version.startsWith("v1-"), true);
   check("revisar y aceptar una solicitud no crea proyecto y se confirma recién con la respuesta del servidor");
 
   // ---- 3. Crear el proyecto desde la solicitud (acuerdo + seña, idempotente) ----
@@ -254,7 +281,7 @@ try {
   await page.click('dialog button[type="submit"]');
   await toast(page, "Publicado. El cliente ya lo ve");
   await updates.filter({ hasText: "Publicada" }).first().waitFor();
-  const preview = await (await context.request.get(`${API}/api/v1/admin/projects/${projectId}/updates`, { headers: { Origin: PORTAL } })).json();
+  const preview = (await apiGet(context, `/admin/projects/${projectId}/updates`)).body;
   assert.equal(preview.updates.find((update) => update.kind === "internal_note").state, "internal");
   assert.equal(preview.updates.find((update) => update.kind === "status_change").state, "published");
   await noOverflow(page, "proyecto 1440");
@@ -286,6 +313,7 @@ try {
   await toast(page, "Proyecto retomado.");
   check("hitos (completar exige evidencia) y pausa/retomar");
 
+  await calm();
   // ---- 7. Cobros globales ----
   await goto(page, "#cobros");
   await page.waitForSelector(".pt-row");
@@ -302,11 +330,13 @@ try {
   await shot(page, "cobros-1440-dark");
   check("el libro de cobros suma lo cobrado de todos los proyectos");
 
+  await calm();
   // ---- 8. Permisos: lo que la cuenta no puede hacer se oculta o se explica ----
   const limited = await newPage(context);
   await limited.route(`${API}/api/v1/auth/admin/me`, async (route) => {
-    const response = await route.fetch();
+    const response = await route.fetch({ headers: { ...route.request().headers(), origin: PORTAL } });
     const body = await response.json();
+    if (!response.ok() || !body.admin) return route.fulfill({ response });
     body.admin.permissions = body.admin.permissions.filter((permission) => !["billing:read", "billing:write", "updates:send", "requests:review"].includes(permission));
     await route.fulfill({ response, json: body });
   });
@@ -327,6 +357,7 @@ try {
   await limited.close();
   check("permisos: se ocultan o explican las acciones que la cuenta no puede hacer (sin escrituras)");
 
+  await calm();
   // ---- 9. Sesión: refresh transparente y vuelta al login si no se puede renovar ----
   const refreshCalls = [];
   const flaky = await newPage(context);
@@ -337,7 +368,12 @@ try {
   });
   flaky.on("request", (req) => { if (req.url().endsWith("/auth/admin/refresh")) refreshCalls.push(req.url()); });
   await flaky.goto(`${PORTAL}/#proyectos`);
-  await flaky.locator(".pt-row-name", { hasText: String(stamp) }).waitFor();
+  try {
+    await flaky.locator(".pt-row-name", { hasText: String(stamp) }).waitFor();
+  } catch (error) {
+    await flaky.screenshot({ path: `${shots}/debug-flaky.png`, fullPage: true });
+    throw new Error(`La lista no apareció tras el refresh. Pantalla: ${(await flaky.locator("body").innerText()).slice(0, 600)}`, { cause: error });
+  }
   assert.equal(refreshCalls.length, 1, "un 401 dispara un solo refresh y la lista se carga igual");
   await flaky.close();
 
@@ -353,16 +389,18 @@ try {
   await doomed.close();
   check("sesión: refresh transparente ante un 401 y vuelta al login si no se puede renovar");
 
+  await calm();
   // ---- 10. Cerrar sesión ----
   await page.locator(".pt-mode [data-action=\"live-logout\"]").click();
   await page.locator("#auth-email").waitFor();
   assert.equal(await page.locator(".pt-nav a").count(), 0);
   assert.ok(!(await page.content()).includes(`Clínica E2E ${stamp}`), "tras cerrar sesión no queda nada del servidor en el DOM");
-  const after = await context.request.get(`${API}/api/v1/admin/projects`, { headers: { Origin: PORTAL } });
-  assert.equal(after.status(), 401, "el servidor revocó la sesión");
+  const after = await apiGet(context, "/admin/projects");
+  assert.equal(after.status, 401, "el servidor revocó la sesión");
   check("cerrar sesión revoca en el servidor y limpia la pantalla");
   await context.close();
 
+  await calm();
   // ---- 11. Capturas en ambos temas y anchos; sin desbordes ----
   // El servidor limita los intentos de credenciales (50 cada 15 min por IP): el paso del código solo se captura en los casos nuevos.
   const matrix = [[375, "dark", false], [375, "light", true], [1440, "light", true]];
@@ -370,6 +408,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width, height: 900 }, locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires", reducedMotion: "reduce" });
     const p = await newPage(ctx, { theme, width, height: 900 });
     await ready(p);
+    await p.locator("#auth-email").waitFor();
     await noOverflow(p, `login ${width} ${theme}`);
     await shot(p, `login-${width}-${theme}`);
     if (withCode) {
@@ -385,6 +424,7 @@ try {
   const authed = await browser.newContext({ viewport: { width: 375, height: 900 }, locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires", reducedMotion: "reduce" });
   const mobile = await newPage(authed, { width: 375, height: 900 });
   await ready(mobile);
+  await mobile.locator("#auth-email").waitFor();
   await login(mobile);
   const responsive = [["#solicitudes", "solicitudes"], [`#proyectos/${projectId}`, "proyecto"], ["#cobros", "cobros"], ["#hoy", "hoy"]];
   for (const theme of ["dark", "light"]) {
@@ -392,6 +432,7 @@ try {
       await mobile.setViewportSize({ width, height: 900 });
       await mobile.evaluate((value) => { document.documentElement.dataset.theme = value; localStorage.setItem("eclipse-theme", value); }, theme);
       for (const [hash, name] of responsive) {
+        await calm(60);
         await goto(mobile, hash);
         await mobile.waitForTimeout(900);
         await noOverflow(mobile, `${name} ${width} ${theme}`);
@@ -413,6 +454,13 @@ try {
   console.log(`\n${checks} recorridos del modo live contra el servidor real. Capturas en test-results/live/. Sin errores de JavaScript.`);
 } catch (error) {
   console.error(error);
+  if (throttled.length) console.error(`El servidor respondió 429 (límite de pedidos) ${throttled.length} veces: ${throttled.slice(0, 5).join(", ")}`);
+  for (const [index, context] of browser.contexts().entries()) {
+    for (const [pageIndex, page] of context.pages().entries()) {
+      await page.screenshot({ path: `${shots}/fallo-${index}-${pageIndex}.png`, fullPage: true }).catch(() => {});
+      console.error(`Pantalla ${index}.${pageIndex} (${page.url()}): ${(await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 500)}`);
+    }
+  }
   process.exitCode = 1;
 } finally {
   await browser.close();

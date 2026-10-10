@@ -18,6 +18,8 @@ const server = createServer(async (req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     const path = resolve(siteRoot, `.${pathname === "/" ? "/index.html" : pathname}`);
     if (!path.startsWith(`${siteRoot}/`)) { res.writeHead(403).end(); return; }
+    // Esta prueba es del modo demostración: un public-config.json local (modo live) no debe cambiarla.
+    if (pathname === "/public-config.json") { res.writeHead(404).end(); return; }
     const body = await readFile(path);
     res.writeHead(200, { "Content-Type": mime[extname(path)] || "application/octet-stream" });
     res.end(body);

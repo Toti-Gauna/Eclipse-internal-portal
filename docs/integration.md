@@ -151,6 +151,18 @@ Permisos del administrador: la interfaz oculta o explica lo que la cuenta no pue
 - Una solicitud ya usada para un proyecto no se marca como tal en la bandeja (la lista de proyectos no trae `sourcePlanRequestId`); un segundo intento termina en 409.
 - La sesión admin vive en memoria del servidor (una instancia): un reinicio o un redeploy cierra la sesión y hay que volver a ingresar.
 
+## Brechas del backend detectadas (sin parches: se trabajó alrededor)
+
+| Qué | Esperado | Real | Sugerencia |
+|---|---|---|---|
+| Lista de proyectos | Datos para mostrar una fila completa | `GET /admin/projects` no trae dinero, nombre de la organización, `startedOn`, `reviewOn` ni `sourcePlanRequestId` | Opción `include=finance,organization` o un resumen agregado |
+| Cobros globales | Un libro de pagos con filtros por período/estado | Solo `GET /admin/projects/:id/payments` (N pedidos); sin unidad Agency/Media/Market | `GET /admin/payments?from&to&status&cursor` |
+| Quién es el cliente | Email o nombre de la cuenta en miembros y solicitudes | Solo `clientId` | Devolver `{email, displayName}` en miembros y en la solicitud (con `clients:read`) |
+| Errores 400 | Campo y motivo | `{"code":"BAD_REQUEST","message":"Bad request"}` | `details: [{field, reason}]` sin datos sensibles; hoy el portal duplica las validaciones |
+| Servidores e2e que comparten base | Cada uno entrega sus correos | La clave de cifrado de la cola de correo es aleatoria por proceso: el otro proceso reclama la fila y falla con `INVALID_OUTBOX_PAYLOAD`, así que a veces el correo de verificación nunca llega | Clave fija por variable de entorno en `tests/e2e/server.ts`, o un esquema por instancia |
+| Límite de credenciales | — | 50 intentos / 15 min por IP, y cinco fallos de una cuenta la bloquean 15 min (también con la clave correcta): las pruebas repetidas se bloquean solas | Variable para subirlo en el servidor e2e |
+| Límite general | — | 120 req/min por IP; abrir Cobros o Proyectos con muchos proyectos abiertos dispara un pedido por proyecto | Resolver con los endpoints agregados de arriba (el portal ya usa caché de 5 min y tope de 40–60 proyectos) |
+
 ## Pruebas
 
 ```bash
@@ -161,4 +173,4 @@ python3 -m http.server 4173 &
 E2E_API=http://localhost:3100 E2E_PORTAL=http://localhost:4173 npm run test:live
 ```
 
-`test:live` se saltea con un aviso si faltan `E2E_API` o `E2E_PORTAL` o si el servidor no responde. Ingresa con MFA, revisa una solicitud real, crea un proyecto con seña por la interfaz (probando el reintento con la misma `Idempotency-Key`), registra cobros, mueve la etapa, publica una actualización y verifica el saldo, los permisos recortados, el refresh de sesión y el cierre de sesión. Guarda capturas en `test-results/live/`. Usa `CHROMIUM_PATH=/ruta/al/chromium` para un navegador ya instalado. Como el servidor limita 50 intentos de credenciales por 15 min y por IP, no conviene correrla más de tres veces seguidas.
+`test:live` se saltea con un aviso si faltan `E2E_API` o `E2E_PORTAL` o si el servidor no responde. Ingresa con MFA, revisa una solicitud real, crea un proyecto con seña por la interfaz (probando el reintento con la misma `Idempotency-Key`), registra cobros, mueve la etapa, publica una actualización y verifica el saldo, los permisos recortados, el refresh de sesión y el cierre de sesión. Guarda capturas en `test-results/live/`. Usa `CHROMIUM_PATH=/ruta/al/chromium` para un navegador ya instalado. El servidor limita 50 intentos de credenciales por 15 min y por IP, y bloquea la cuenta 15 min tras cinco fallos: la prueba provoca un solo fallo por corrida y consume unos 12 intentos, así que no conviene correrla más de tres veces seguidas.

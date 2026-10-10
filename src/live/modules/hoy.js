@@ -4,7 +4,7 @@ import { diffDays, todayISO } from "../../rules.js";
 import { formatCents as money } from "../adapters/common.js";
 import { collectPayments } from "./cobros.js";
 
-const LIMIT = 30;
+const LIMIT = 15;
 
 export default {
   id: "hoy",
@@ -18,8 +18,9 @@ export default {
     if (can("requests:read")) repo.ensure("catalog").catch(() => null).then(() => repo.ensure("requests", "pending")).catch(() => {});
     if (can("projects:read")) {
       repo.ensure("projects").then((data) => {
+        // Un pedido por proyecto: solo los abiertos más recientes y con caché larga (la API admite 120 pedidos por minuto).
         const ids = data.list.filter((project) => project.stage !== "closed").slice(0, LIMIT).map((project) => project.id);
-        if (can("billing:read")) { repo.ensureAll("project.finance", ids); repo.ensureAll("project.payments", ids); }
+        if (can("billing:read")) repo.ensureAll("project.payments", ids, { maxAge: 300_000 });
       }).catch(() => {});
     }
   },
@@ -37,9 +38,10 @@ export default {
     const projectsEntry = ctx.can("projects:read") ? ctx.repo.get("projects") : null;
     const projects = projectsEntry?.data?.list || [];
     const active = projects.filter((project) => !["closed", "support"].includes(project.stage));
-    const finances = ctx.can("billing:read") ? projects.map((project) => ctx.repo.data("project.finance", project.id)).filter(Boolean) : [];
-    const receivable = finances.reduce((sum, finance) => sum + finance.balanceCents, 0);
-    const { payments } = ctx.can("billing:read") ? collectPayments(ctx.repo, projects.filter((project) => project.stage !== "closed").slice(0, LIMIT)) : { payments: [] };
+    const shown = projects.filter((project) => project.stage !== "closed").slice(0, LIMIT);
+    const { payments, loading: loadingPayments } = ctx.can("billing:read") ? collectPayments(ctx.repo, shown) : { payments: [], loading: 0 };
+    const committed = payments.filter((payment) => payment.status === "committed");
+    const committedCents = committed.reduce((sum, payment) => sum + payment.amountCents, 0);
 
     const items = [];
     for (const request of (requests?.data?.items || []).filter((r) => ["submitted", "under_review"].includes(r.status))) {
@@ -61,7 +63,7 @@ export default {
       <dl class="pt-overview">
         <div><dt>Solicitudes por revisar</dt><dd><span class="pt-big">${requests?.data ? requests.data.items.length : "—"}${requests?.data?.nextCursor ? "+" : ""}</span><span class="pt-fine">${requests ? '<a href="#solicitudes">Abrir la bandeja</a>' : "Tu cuenta no tiene requests:read."}</span></dd></div>
         <div><dt>Proyectos activos</dt><dd><span class="pt-big">${projectsEntry?.data ? active.length : "—"}</span><span class="pt-fine">${projectsEntry ? '<a href="#proyectos">Ver proyectos</a>' : "Tu cuenta no tiene projects:read."}</span></dd></div>
-        <div><dt>Por cobrar</dt><dd><span class="pt-big" data-key>${ctx.can("billing:read") ? money(receivable) : "—"}</span><span class="pt-fine">${ctx.can("billing:read") ? `Saldo del precio acordado en ${finances.length} proyecto${finances.length === 1 ? "" : "s"}. No es ingreso todavía.` : "Tu cuenta no tiene billing:read."}</span></dd></div>
+        <div><dt>Cobros comprometidos</dt><dd><span class="pt-big" data-key>${ctx.can("billing:read") ? (loadingPayments ? "…" : money(committedCents)) : "—"}</span><span class="pt-fine">${ctx.can("billing:read") ? `${committed.length} cobro${committed.length === 1 ? "" : "s"} con fecha en ${shown.length} proyecto${shown.length === 1 ? "" : "s"} abiertos. No es ingreso todavía; el saldo está en <a href="#proyectos">Proyectos</a>.` : "Tu cuenta no tiene billing:read."}</span></dd></div>
       </dl>
 
       <section class="pt-list" aria-labelledby="today-title">

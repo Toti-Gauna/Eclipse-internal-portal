@@ -5,6 +5,8 @@ import { CHANGE_STATUS_LABELS, MEMBER_ROLE_LABELS, MILESTONE_STATUS_LABELS, PAYM
 import { stageHistoryFromAudit } from "../adapters/projects.js";
 import forms from "./proyectos-forms.js";
 
+const FINANCE_LIMIT = 40;
+const FINANCE_TTL = 5 * 60_000;
 export const LIVE_STAGES = [...MAIN_STAGES, "support"];
 const FILTERS = [
   ["activos", "Activos", (p) => !["closed", "support"].includes(p.stage)],
@@ -29,7 +31,8 @@ export default {
   prepare(ctx, route) {
     const { repo, can } = ctx;
     if (!route.id) {
-      repo.ensure("projects").then((data) => { if (can("billing:read")) repo.ensureAll("project.finance", data.list.map((p) => p.id)); }).catch(() => {});
+      // La API no trae dinero en la lista: se pide el saldo de los proyectos abiertos (tope y caché largos para no saturar los 120 req/min).
+      repo.ensure("projects").then((data) => { if (can("billing:read")) repo.ensureAll("project.finance", data.list.filter((p) => p.stage !== "closed").slice(0, FINANCE_LIMIT).map((p) => p.id), { maxAge: FINANCE_TTL }); }).catch(() => {});
       return;
     }
     const id = route.id;
@@ -75,7 +78,7 @@ function list(ctx) {
           return `<li class="pt-row" style="--cols:${cols}"${project.stage === "paused" ? " data-late" : ""}>
             <div><a class="pt-row-name" href="${href}">${esc(project.name)}</a><span class="pt-meta">${esc(project.service)}</span><span class="pt-code">${esc(project.code)}</span></div>
             <div>${stageMark(project, { layout: "stack", meaning: true })}</div>
-            <div><span class="pt-cell-label label">Cobrado</span>${finance ? `<span class="readout">${money(finance.collectedCents, { withCurrency: false })}</span><span class="pt-meta">de ${money(finance.agreedCents)}</span>` : `<span class="pt-meta" style="margin:0">${ctx.can("billing:read") ? "Cargando…" : "Sin permiso"}</span>`}</div>
+            <div><span class="pt-cell-label label">Cobrado</span>${finance ? `<span class="readout">${money(finance.collectedCents, { withCurrency: false })}</span><span class="pt-meta">de ${money(finance.agreedCents)}</span>` : `<span class="pt-meta" style="margin:0">${!ctx.can("billing:read") ? "Sin permiso" : project.stage === "closed" ? "Ver ficha" : ctx.repo.get("project.finance", project.id).status === "error" ? "No disponible" : "Cargando…"}</span>`}</div>
             <div><span class="pt-cell-label label">Saldo</span>${finance ? `<span class="readout">${money(finance.balanceCents)}</span>` : `<span class="pt-meta" style="margin:0">—</span>`}</div>
             <div class="pt-row-end"><a class="btn btn-sm btn-ghost btn-open" href="${href}">Ver proyecto ${icon("arrow")}</a></div>
           </li>`;

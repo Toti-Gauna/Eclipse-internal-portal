@@ -91,7 +91,7 @@ export function createAuth({ api, onChange = () => {}, onReady = () => {}, now =
 
 export function renderAuthScreen(auth, { esc, phaseGlyph, icon, dark, config }) {
   const { phase, pending, error, notice, email, expiresAt } = auth;
-  const until = expiresAt ? new Date(expiresAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "";
+  const until = expiresAt ? new Date(expiresAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
   const crossSite = config && config.sameSite === false;
   const errorBlock = error ? `<p class="form-error live-auth-error" role="alert" id="auth-error">${esc(error)}</p>` : `<p class="form-error live-auth-error" role="alert" id="auth-error"></p>`;
   const noticeBlock = notice ? `<p class="live-auth-notice pt-fine" role="status">${esc(notice)}</p>` : "";

@@ -98,7 +98,11 @@ export function createRepository({ api, can = () => true, now = () => Date.now()
     async function worker() {
       while (queue.length) {
         const key = queue.shift();
-        try { results.set(key, await ensure(name, key, options)); } catch (error) { results.set(key, error); }
+        try { results.set(key, await ensure(name, key, options)); } catch (error) {
+          results.set(key, error);
+          // Con un 429 seguir pidiendo solo empeora: se corta la tanda y lo pendiente queda sin cargar (se reintenta al volver a entrar).
+          if (error?.code === "TOO_MANY_REQUESTS") queue.length = 0;
+        }
       }
     }
     await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
