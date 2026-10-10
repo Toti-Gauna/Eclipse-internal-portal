@@ -1502,6 +1502,7 @@ function render() {
     dialog.addEventListener("click", (event) => { if (event.target === dialog) closeModal(); });
     dialog.showModal();
   }
+  paintToasts();
 }
 
 function showModal(modal) {
@@ -1522,14 +1523,26 @@ function setModal(patch) {
   render();
 }
 
-function toast(message, tone = "success") {
+// Los avisos viven fuera del DOM de cada pantalla: un dibujado posterior (p. ej. datos del servidor que llegan) no los borra.
+const toasts = [];
+function paintToasts() {
   const region = root.querySelector(".toast-region");
   if (!region) return;
-  const item = document.createElement("div");
-  item.className = `toast${tone === "warning" ? " warning" : ""}`;
-  item.textContent = message;
-  region.append(item);
-  setTimeout(() => item.remove(), 4200);
+  region.replaceChildren(...toasts.map((entry) => {
+    const item = document.createElement("div");
+    item.className = `toast${entry.tone === "warning" ? " warning" : ""}`;
+    item.textContent = entry.message;
+    if (entry.shown) item.style.animation = "none";
+    entry.shown = true;
+    return item;
+  }));
+}
+
+function toast(message, tone = "success") {
+  const entry = { message, tone, shown: false };
+  toasts.push(entry);
+  paintToasts();
+  setTimeout(() => { toasts.splice(toasts.indexOf(entry), 1); paintToasts(); }, 4200);
 }
 
 /**

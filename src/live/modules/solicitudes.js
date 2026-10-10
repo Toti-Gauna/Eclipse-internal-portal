@@ -4,7 +4,7 @@
 import { adaptRequest } from "../adapters/requests.js";
 import { REQUEST_STATUS_LABELS, formatCents as money, shortId } from "../adapters/common.js";
 import * as out from "../adapters/outbound.js";
-import { unwrap } from "../errors.js";
+import { FormError, unwrap } from "../errors.js";
 
 const PAGE = 20;
 export const REQUEST_FILTERS = [
@@ -141,12 +141,13 @@ export default {
 
   mutations: {
     async "request-review"(values, h) {
-      const request = h.repo.data("request", values.id);
-      if (!request) throw new Error("La solicitud ya no está cargada. Volvé a abrirla.");
+      const id = h.target.id;
+      const request = h.repo.data("request", id);
+      if (!request) throw new FormError("La solicitud ya no está cargada. Cerrá este diálogo y volvé a abrirla.");
       const body = unwrap(out.reviewBody(values, request));
-      h.touch(["request", values.id]);
+      h.touch(["request", id]);
       for (const key of h.repo.loadedKeys("requests")) h.touch(["requests", key]);
-      await h.api.patch(`/admin/plan-requests/${values.id}/review`, body);
+      await h.api.patch(`/admin/plan-requests/${id}/review`, body);
       return { message: { under_review: "Revisión iniciada.", reviewed: "Solicitud marcada como revisada.", accepted: "Solicitud aceptada. No se creó ningún proyecto.", rejected: "Solicitud rechazada." }[values.status] || "Solicitud actualizada." };
     },
   },

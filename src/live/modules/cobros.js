@@ -54,8 +54,9 @@ export default {
       const shown = data.list.slice(0, PROJECT_LIMIT);
       const { payments, loading, failed } = collectPayments(ctx.repo, shown);
       const [from, to] = range(f.period, today);
-      const inPeriod = payments.filter((payment) => payment.date && payment.date >= from && payment.date <= to);
-      const rows = inPeriod.filter((payment) => f.status === "todos" || payment.status === f.status).sort((a, b) => b.date.localeCompare(a.date));
+      // "Todo" incluye también lo que aún no tiene fecha (propuestos sin vencimiento).
+      const inPeriod = payments.filter((payment) => (f.period === "todo" ? true : payment.date && payment.date >= from && payment.date <= to));
+      const rows = inPeriod.filter((payment) => f.status === "todos" || payment.status === f.status).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
       const collected = inPeriod.filter((payment) => payment.status === "collected");
       const income = collected.reduce((sum, payment) => sum + payment.amountCents, 0);
       const maintenance = collected.filter((payment) => payment.kind === "maintenance").reduce((sum, payment) => sum + payment.amountCents, 0);
@@ -78,8 +79,8 @@ export default {
       </div>
       <section class="pt-list" style="margin-top:28px" aria-label="Cobros">
       ${rows.length ? `<div class="pt-rows-head" style="--cols:${cols}"><span class="label">Fecha</span><span class="label">Concepto</span><span class="label">Proyecto</span><span class="label">USD</span><span></span></div>
-        <ul class="pt-rows">${rows.map((payment) => `<li class="pt-row" style="--cols:${cols}"${payment.status === "committed" && payment.dueOn < today ? " data-late" : ""}>
-          <div class="pt-date">${fmtDate(payment.date, true)}<small class="log-time">${{ collected: "cobrado", committed: "vence", proposed: "vencimiento", voided: "anulado" }[payment.status]}</small></div>
+        <ul class="pt-rows">${rows.map((payment) => `<li class="pt-row" style="--cols:${cols}"${payment.status === "committed" && payment.dueOn && payment.dueOn < today ? " data-late" : ""}>
+          <div class="pt-date">${payment.date ? fmtDate(payment.date, true) : "Sin fecha"}<small class="log-time">${{ collected: "cobrado", committed: "vence", proposed: "vencimiento", voided: "anulado" }[payment.status]}</small></div>
           <div>${esc(payment.concept)} <span class="pt-tag${{ collected: " pt-tag-ok", committed: " pt-tag-attn", voided: " pt-tag-late", proposed: " pt-tag-out" }[payment.status]}">${esc(payment.statusLabel)}</span>${payment.note ? `<span class="pt-meta">${esc(payment.note)}</span>` : ""}</div>
           <div><a class="pt-link" style="min-height:0" href="#proyectos/${encodeURIComponent(payment.projectId)}">${esc(project(payment.projectId)?.name || payment.projectName || "Proyecto")}</a></div>
           <div class="readout"><strong${payment.status === "voided" ? ' style="text-decoration:line-through"' : ""}>${money(payment.amountCents, { withCurrency: false })}</strong></div>
@@ -92,7 +93,7 @@ export default {
         <div class="pt-kicker"><span class="label">Libro de cobros</span></div>
         <h1 class="display pt-title">USD <em>cobrado</em>.</h1>
         <p class="pt-company">El único número que decide es lo que ya entró. Comprometido y propuesto se ven aparte. El saldo de cada proyecto lo calcula el servidor.</p>
-      </div><div class="pt-head-actions">${ctx.can("billing:write") ? btn("new-payment", `${icon("plus")} Cobro`, "btn-primary", 'data-return="#cobros"') : ""}</div></div>
+      </div><div class="pt-head-actions">${ctx.can("billing:write") ? btn("new-payment", `${icon("plus")} Cobro`, "btn-primary") : ""}</div></div>
       ${entryView(entry, { slice: "projects", key: "", label: "No pudimos cargar los proyectos", render: body })}`, "cobros");
   },
 };

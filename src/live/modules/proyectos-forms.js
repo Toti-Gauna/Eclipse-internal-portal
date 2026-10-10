@@ -55,7 +55,8 @@ export default {
     "new-payment": (wizard, ctx) => {
       const { esc, field, area, select, row } = ctx;
       const today = todayISO();
-      const projects = (ctx.repo.data("projects")?.list || []).filter((project) => project.stage !== "closed");
+      // Un proyecto cerrado solo acepta mantenimiento, pero si se llegó desde su ficha tiene que poder elegirse.
+      const projects = (ctx.repo.data("projects")?.list || []).filter((project) => project.stage !== "closed" || project.id === wizard.id);
       const finance = wizard.values.projectId || wizard.id ? ctx.repo.data("project.finance", wizard.values.projectId || wizard.id) : null;
       const v = { projectId: wizard.id || "", kind: "installment", status: "collected", amount: "", receivedOn: today, dueOn: "", reference: "", note: "", ...wizard.values };
       if (!wizard.values.amount && finance && v.projectId === wizard.id && finance.balanceCents - finance.committedCents > 0 && v.kind !== "maintenance") v.amount = String(centsToDollars(finance.balanceCents - finance.committedCents));
