@@ -24,7 +24,7 @@ export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.f
   }
 
   /** Una sola llamada HTTP, sin políticas de sesión. Lanza ApiError ante cualquier falla. */
-  async function rawFetch(method, path, { body, query, headers = {}, signal, timeout = timeoutMs, context = null } = {}) {
+  async function rawFetch(method, path, { body, rawBody, contentType, asBlob = false, query, headers = {}, signal, timeout = timeoutMs, context = null } = {}) {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
@@ -40,13 +40,21 @@ export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.f
           method,
           credentials: "include",
           cache: "no-store",
-          headers: { Accept: "application/json", ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...headers },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
+          headers: { Accept: asBlob ? "*/*" : "application/json", ...(rawBody !== undefined ? { "Content-Type": contentType } : body !== undefined ? { "Content-Type": "application/json" } : {}), ...headers },
+          body: rawBody !== undefined ? rawBody : body !== undefined ? JSON.stringify(body) : undefined,
           signal: controller.signal,
         });
       } catch {
         const aborted = !timedOut && signal?.aborted;
         throw new ApiError({ code: timedOut ? "TIMEOUT" : aborted ? "ABORTED" : "NETWORK", context, unknownOutcome: method !== "GET" && !aborted });
+      }
+      if (asBlob && response.ok) {
+        // Descarga binaria (documentos): el archivo viaja como Blob; los errores siguen siendo JSON.
+        try {
+          return { blob: await response.blob(), contentType: response.headers.get("Content-Type") || "", disposition: response.headers.get("Content-Disposition") || "" };
+        } catch {
+          throw new ApiError({ code: timedOut ? "TIMEOUT" : signal?.aborted ? "ABORTED" : "NETWORK", context });
+        }
       }
       let text;
       try {
@@ -131,7 +139,7 @@ export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.f
         if (csrfMode === "session") headers["X-CSRF-Token"] = await ensureSessionCsrf(options.signal);
         else if (csrfMode !== "none") headers["X-CSRF-Token"] = csrfMode;
         if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-        return await rawFetch(method, path, { body: options.body, query: options.query, headers, signal: options.signal, timeout: options.timeout, context });
+        return await rawFetch(method, path, { body: options.body, rawBody: options.rawBody, contentType: options.contentType, asBlob: options.asBlob, query: options.query, headers, signal: options.signal, timeout: options.timeout, context });
       } catch (error) {
         if (!(error instanceof ApiError) || error.sessionExpired) throw error;
         if (auth && error.status === 401 && !refreshed) { refreshed = true; await refreshSession(); continue; }
@@ -197,6 +205,10 @@ export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.f
     get: (path, options) => request("GET", path, options),
     post: (path, body, options) => request("POST", path, { ...options, body }),
     patch: (path, body, options) => request("PATCH", path, { ...options, body }),
+    /** Sube un archivo tal cual (cuerpo binario con su propio Content-Type). Sin Idempotency-Key: nunca se reintenta solo. */
+    upload: (path, file, options = {}) => request("POST", path, { ...options, rawBody: file, contentType: options.contentType || file.type, timeout: options.timeout ?? 60000 }),
+    /** Descarga un archivo autenticado: devuelve { blob, contentType, disposition }. */
+    download: (path, options = {}) => request("GET", path, { ...options, asBlob: true, timeout: options.timeout ?? 60000 }),
     listAll,
     get admin() { return state.admin; },
     get hasSessionCsrf() { return state.csrf !== null; },
