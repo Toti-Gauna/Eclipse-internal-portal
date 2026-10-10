@@ -16,6 +16,8 @@ const DEFAULT_FILTERS = { kind: "", status: "", page: "1", followUpOn: "", ack: 
 
 // El archivo elegido y los clientes encontrados viven en memoria del módulo (nunca en storage).
 let picked = null;
+let forcedFor = "";
+if (typeof window !== "undefined") window.addEventListener("hashchange", () => { forcedFor = ""; });
 let pickedError = "";
 let clients = [];
 let lastImportId = "";
@@ -77,7 +79,11 @@ export default {
     if (route.id) {
       if (route.id !== lastImportId) { lastImportId = route.id; resetDecisions(f); }
       // Siempre se vuelve a pedir: el servidor recalcula la revisión contra la base de ahora.
-      ctx.repo.ensure("imports.item", route.id, { force: true }).catch(() => {});
+      // Solo al entrar: un redibujado por un filtro o una casilla vuelve a llamar a prepare() y no tiene que pedir otra vez ni pisar lo que se está escribiendo.
+      if (forcedFor !== route.id) {
+        forcedFor = route.id;
+        ctx.repo.ensure("imports.item", route.id, { force: true }).catch(() => {});
+      } else ctx.repo.ensure("imports.item", route.id).catch(() => {});
     } else {
       lastImportId = "";
       ctx.repo.ensure("imports.list", "", { force: true }).catch(() => {});

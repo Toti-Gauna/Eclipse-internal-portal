@@ -33,6 +33,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const shots = resolve(root, "test-results/live-comms");
 mkdirSync(shots, { recursive: true });
 
+// Elegir el archivo y esperar a que la pantalla lo muestre antes de tocar «Subir»: la lista de importaciones puede redibujar la tarjeta justo ahí.
+async function pickBackup(page, file) {
+  const name = typeof file === "string" ? file.split("/").pop() : file.name;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.setInputFiles("#li-file", file);
+    try { await page.locator("#li-file-status", { hasText: name }).waitFor({ timeout: 4000 }); return; } catch { /* se redibujó: se vuelve a elegir */ }
+  }
+  throw new Error(`La pantalla no mostró el archivo elegido (${name}).`);
+}
+
 try {
   assert.equal((await fetch(`${API}/__e2e/health`)).ok, true);
 } catch {
@@ -481,13 +491,13 @@ try {
   await page.locator('dialog a[href="#importar"]').click();
   await page.waitForSelector("#li-file");
   // Un archivo que no es un respaldo se rechaza en el navegador; la copia del servidor tampoco.
-  await page.setInputFiles("#li-file", { name: "servidor.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ origen: "servidor", datos: {} })) });
+  await pickBackup(page, { name: "servidor.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ origen: "servidor", datos: {} })) });
   await page.click('[data-action="imp-upload"]');
   await page.locator("#li-upload-error", { hasText: "copia de lo que ve el servidor" }).waitFor();
-  await page.setInputFiles("#li-file", { name: "roto.json", mimeType: "application/json", buffer: Buffer.from("{no es json") });
+  await pickBackup(page, { name: "roto.json", mimeType: "application/json", buffer: Buffer.from("{no es json") });
   await page.click('[data-action="imp-upload"]');
   await page.locator("#li-upload-error", { hasText: "JSON válido" }).waitFor();
-  await page.setInputFiles("#li-file", backupPath);
+  await pickBackup(page, backupPath);
   await page.click('[data-action="imp-upload"]');
   await page.waitForFunction(() => /^#importar\/[0-9a-f-]{36}$/.test(location.hash));
   const importId = (await page.evaluate(() => location.hash)).split("/")[1];
@@ -580,7 +590,7 @@ try {
   // Idempotencia: el mismo archivo es la misma importación ya confirmada.
   await goto(page, "#importar");
   await page.locator(".li-list").waitFor();
-  await page.setInputFiles("#li-file", backupPath);
+  await pickBackup(page, backupPath);
   await page.click('[data-action="imp-upload"]');
   await page.waitForFunction((id) => location.hash === `#importar/${id}`, importId, { timeout: 15000 }).catch(async (error) => {
     throw new Error(`El mismo archivo no devolvió la misma importación. Hash: ${await page.evaluate(() => location.hash)}; error: ${await page.locator("#li-upload-error").textContent().catch(() => "?")}`, { cause: error });
@@ -684,7 +694,7 @@ try {
     await page.selectOption("#li-a1", "internal");
     await page.selectOption("#li-k0", "installment");
     await page.fill("#li-follow", "2026-12-01");
-    await page.locator("#li-decide-title").scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.getElementById("li-decide-title")?.scrollIntoView({ block: "center" }));
     await noOverflow(page, `decisiones ${width} ${theme}`);
     await page.locator(".li-card", { has: page.locator("#li-decide-title") }).screenshot({ path: `${shots}/importar-decisiones-${width}-${theme}.png` });
   }
@@ -695,6 +705,12 @@ try {
   console.log(`\n${checks} comprobaciones OK`);
 } catch (error) {
   console.error(error);
+  for (const [index, context] of browser.contexts().entries()) {
+    for (const [pageIndex, page] of context.pages().entries()) {
+      await page.screenshot({ path: `${shots}/fallo-${index}-${pageIndex}.png`, fullPage: true }).catch(() => {});
+      console.error(`Pantalla ${index}.${pageIndex} (${page.url()}): ${(await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 700)}`);
+    }
+  }
   process.exitCode = 1;
 } finally {
   await browser.close();
