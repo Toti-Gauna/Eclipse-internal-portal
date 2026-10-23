@@ -1,5 +1,6 @@
 // Lista de módulos del modo live. Para sumar uno (etapa 2): crear src/live/modules/<id>.js con el contrato de registry.js
 // y agregar su import y su entrada acá. Es la única línea compartida: nada más se toca.
+import contratos from "./contratos.js";
 import core from "./core.js";
 import hoy from "./hoy.js";
 import solicitudes from "./solicitudes.js";
@@ -13,4 +14,4 @@ import documentos from "./documentos.js";
 import importar from "./importar.js";
 import pending from "./pending.js";
 
-export const MODULES = [core, hoy, solicitudes, proyectos, cobros, ...planner, prospectos, lotes, comunicaciones, documentos, importar, ...pending];
+export const MODULES = [core, hoy, solicitudes, proyectos, cobros, ...planner, prospectos, lotes, comunicaciones, documentos, contratos, importar, ...pending];

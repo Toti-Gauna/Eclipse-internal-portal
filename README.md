@@ -42,7 +42,7 @@ Hace falta el backend ([Eclipse-be](https://github.com/Toti-Gauna/Eclipse-be)) p
 
 **Mi plan**, **Herramientas**, **Bitácora** y **Datos y respaldos** también están en el menú de tres puntos del header. Las altas de prospectos, lotes, proyectos, cobros, abonos, metas y eventos, además de hitos, actualizaciones y acciones del cliente, usan pantallas completas con pasos y revisión final. Los datos se guardan al confirmar.
 
-En **live** hoy están conectadas Solicitudes, Proyectos (con hitos, actualizaciones, alcance y miembros), Cobros y una versión parcial de Hoy; el resto muestra una pantalla honesta de «todavía no está conectada» (tabla de estado en [docs/integration.md](docs/integration.md)).
+En **live** hoy están conectadas Solicitudes, Proyectos (con hitos, actualizaciones, alcance y miembros), Cobros y una versión parcial de Hoy. El módulo [Contratación del reto](docs/contratacion-reto.md) agrega documentos pre-proyecto, evidencia y conciliación sobre la API 0.8.0: sandbox con datos ficticios, producción bloqueada. El resto muestra una pantalla honesta de «todavía no está conectada» (tabla de estado en [docs/integration.md](docs/integration.md)).
 
 Las reglas viven en `src/rules.js` (funciones puras, sin DOM). Las metas por bimestre (B1–B3, por unidad) y el hito de MRR están en `src/data/seed.js` → `SETTINGS`.
 
