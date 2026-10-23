@@ -1,0 +1,101 @@
+name: Deploy internal portal to Hostinger
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostinger-internal-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUBLIC_PORTAL_MODE: live
+      PUBLIC_API_BASE_URL: https://api.eclipse-business.com/api/v1
+      PUBLIC_CLIENT_PORTAL_URL: https://eclipse-business.com/portal/
+      PUBLIC_WHATSAPP_MODE: manual
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --include=dev
+      - run: npm test
+      - run: bash -n scripts/hostinger-publish.sh
+      - name: Prepare public live site
+        run: node scripts/prepare-hostinger.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Check live entry without production credentials
+        run: node tests/hostinger-browser.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hostinger-internal-site
+          path: _site/
+          include-hidden-files: true
+          retention-days: 7
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.HOSTINGER_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: hostinger-internal-production
+      url: https://interno.eclipse-business.com
+    env:
+      HOSTINGER_HOST: 185.239.210.183
+      HOSTINGER_PORT: '65002'
+      HOSTINGER_USER: u902414219
+      HOSTINGER_PATH: /home/u902414219/domains/interno.eclipse-business.com/public_html
+      RELEASE: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: hostinger-internal-site
+          path: site
+      - name: Configure verified SSH access
+        env:
+          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY" || { echo 'Missing HOSTINGER_SSH_KEY repository secret.' >&2; exit 1; }
+          test -n "$KNOWN_HOSTS" || { echo 'Missing HOSTINGER_KNOWN_HOSTS repository secret.' >&2; exit 1; }
+          mkdir -m 700 -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/hostinger
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/hostinger ~/.ssh/known_hosts
+          ssh-keygen -y -P '' -f ~/.ssh/hostinger >/dev/null
+          ssh-keygen -F "[$HOSTINGER_HOST]:$HOSTINGER_PORT" -f ~/.ssh/known_hosts >/dev/null
+      - name: Upload, back up, and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_args=(-p "$HOSTINGER_PORT" -i ~/.ssh/hostinger -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          destination="$HOSTINGER_USER@$HOSTINGER_HOST"
+          stage="${HOSTINGER_PATH%/public_html}/.eclipse-deploy/staging/$RELEASE"
+          tar -cf "$RUNNER_TEMP/hostinger-internal.tar" -C site .
+          ssh "${ssh_args[@]}" "$destination" "umask 077; mkdir -p '$stage' && tar -xf - -C '$stage'" < "$RUNNER_TEMP/hostinger-internal.tar"
+          ssh "${ssh_args[@]}" "$destination" "bash -s -- publish '$HOSTINGER_PATH' '$RELEASE'" < scripts/hostinger-publish.sh
+          if ! node scripts/smoke-hostinger.mjs; then
+            echo 'Public checks failed; restoring the internal portal only.' >&2
+            ssh "${ssh_args[@]}" "$destination" "bash -s -- rollback '$HOSTINGER_PATH' '$RELEASE'" < scripts/hostinger-publish.sh
+            exit 1
+          fi
+      - name: Remove runner SSH files
+        if: always()
+        run: rm -f ~/.ssh/hostinger ~/.ssh/known_hosts
